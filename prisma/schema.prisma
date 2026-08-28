@@ -22,3 +22,15 @@ model Post {
 
   @@map("posts")
 }
+
+
+// prisma/schema.prisma — add alongside your existing Post model
+
+model User {
+  id           String   @id @default(auto()) @map("_id") @db.ObjectId
+  name         String
+  email        String   @unique
+  passwordHash String
+  role         String   @default("admin")
+  createdAt    DateTime @default(now())
+}
