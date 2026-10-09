@@ -67,7 +67,10 @@ Links to the main site go through `components/layout/MainSiteLink.jsx`: a plain 
 ### Route layout
 
 - `src/app/layout.js` — fonts, theme provider, default metadata. No menu.
-- `src/app/(site)/` — public pages; its layout adds `SiteHeader` and `SiteFooter`. `src/app/not-found.jsx` sits outside the group and includes them itself.
+- `src/app/(site)/` — public pages; its layout adds `SiteHeader`, the category row (`components/layout/CategoryBar.jsx`) and `SiteFooter`. `src/app/not-found.jsx` sits outside the group and includes header and footer itself.
+- Public addresses: article `/<slug>` (`(site)/[slug]`, flat, never with the category), `/category/[slug]` (`?type=` filters by content type), `/type/[type]`, `/tag/[slug]`, `/tags` (all topics), `/author/[username]`, `/preview/[id]`. The article route is a catch-all at the top level: static folders beside it win, and `RESERVED_SLUGS` in `src/services/posts/slugs.js` must list every such folder, so add a name there when adding a top-level route.
+- Old addresses redirect permanently in `next.config.mjs` (`/posts/<slug>`, `/tags/<slug>`, old admin paths). A renamed post's old slug redirects from the article page itself (`getCurrentSlugFor()`).
+- `src/app/sitemap.js` → `/blog/sitemap.xml`: listed articles, plus category, type and topic pages that have posts (topics need two). The main site's robots.txt or sitemap index has to point to it; nothing in this app does.
 - `src/app/admin/layout.js` — adds the Auth.js `SessionProvider` (kept off public pages so they make no session request) and `robots: noindex` for everything under `/admin`.
 - `src/app/admin/login/` — the sign-in page. It must stay outside the `(panel)` group, or the access check would redirect it to itself.
 - `src/app/admin/(panel)/` — the signed-in area: its layout checks the user, renders the sidebar (`components/admin/AdminNav.jsx`) and is `force-dynamic`. Overview at `/admin`, posts at `/admin/posts`, editor at `/admin/posts/new` and `/admin/posts/[id]/edit`.
@@ -94,7 +97,9 @@ A `Tag` that was never attached to a post has no `postIds` field in MongoDB, and
 
 Old documents may still carry the pre-spec fields (`published`, `coverUrl`, `coverPublicId`, a `tags` text list). Prisma ignores them; do not rely on them.
 
-Addresses are built by `postPath()` / `tagPath()` in `src/lib/posts.js`. They currently return `/posts/<slug>` and `/tags/<slug>`; spec step 15 moves them to `/<slug>` and `/tag/<slug>` with redirects from the old ones.
+Addresses are built by `postPath()`, `tagPath()`, `categoryPath()`, `typePath()` and `authorPath()` in `src/lib/posts.js`; never write them by hand. `revalidatePosts()` uses the same functions.
+
+Pages that read `searchParams` or a dynamic segment are rendered per request, so a scheduled post appears on them the moment its time passes. `/tags` and the sitemap are cached with `revalidate = 300`.
 
 ### Editor
 
@@ -137,6 +142,7 @@ Login rate limiting (`src/lib/login-rate-limit.js`): every attempt is stored as 
 
 ### API
 
+- The article page embeds `TechArticle` JSON-LD; `dateModified` is `contentUpdatedAt ?? publishedAt`, never `updatedAt`.
 - `GET /api/posts?limit=` — **public, and a contract with the main site** (its home page shows the newest posts). Only listed posts with `showOnMainSite` on. The shape, caching header and rules are in `docs/main-site-api.md`; fields may be added but not removed or renamed, and never content or ids.
 - `GET /api/posts/slug-check?slug=&except=` — signed-in users; used by the pre-publish checklist.
 - `POST /api/posts`, `PATCH /api/posts/[id]` — any signed-in user who may edit the post; setting a status other than `DRAFT` needs `ADMIN`. The editor always sends the full post, including `status`.

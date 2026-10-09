@@ -645,9 +645,15 @@ Statuses below are from the audit of 2026-10-09 and are updated as steps are bui
 | 12 | Categories admin | ✅ | `/admin/categories`: list with post counts, add / edit, up / down, delete only when empty ("Move posts first"). |
 | 13 | Tags admin | ✅ | `/admin/tags`: search, paging, rename, merge with a confirmation step, delete one or all unused. |
 | 14 | Profile | ✅ | `/admin/profile`: name, username, avatar, bio, website, social links; change password (12+ characters, bcrypt). |
-| 15 | Public taxonomy pages | ⚠️ | Topic pages at `/tags`, article at `/posts/<slug>`. Decision: new addresses with redirects (section 2). |
-| 16 | Redirects + sitemap/RSS/JSON-LD | ❌ | RSS is not built by decision. |
-| 17 | Final security + acceptance pass | ❌ | |
+| 15 | Public taxonomy pages | ✅ | `/category/[slug]` (with `?type=` chips), `/type/[type]`, `/tag/[slug]`, `/author/[username]`; articles at `/blog/<slug>`. Category row with a Troubleshooting link under the top bar. Related posts: manual picks, shared topics, same category (up to 4). `/tags` stays as the list of all topics. |
+| 16 | Redirects + sitemap/RSS/JSON-LD | ✅ | Old slugs, `/posts/<slug>` and `/tags/<slug>` redirect permanently (308). `/blog/sitemap.xml` and `TechArticle` JSON-LD built. RSS is not built, by decision. |
+| 17 | Final security + acceptance pass | ✅ | Section 9 checked: every write handler and server action checks the user and validates input; admin and preview are noindex and uncached; no server module is imported by client code; only `NEXT_PUBLIC_BASE_PATH` is public; `.env.example` lists every variable. Section 13 tested against a local production build, see the notes below the table. |
+
+Notes on the acceptance tests (section 13), run 2026-10-09 against a local production build with a headless browser:
+
+- All items passed, with these differences in wording: redirects are `308` (permanent, what Next.js sends) rather than `301`; a server action called while signed out answers with a redirect to the sign-in page and changes nothing.
+- "A post scheduled 10 minutes ahead appears within ~5 minutes" was tested by moving a scheduled post's time into the past, not by waiting: it became public at once on the pages rendered per request (home, category, type, tag, article) and the API. The two cached pages, `/tags` and the sitemap, refresh at most every 5 minutes.
+- Not testable locally: anything that needs both sites on one domain (see `docs/design-brief.md` section 10), and social networks fetching the share image.
 
 ---
 

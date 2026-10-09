@@ -31,7 +31,8 @@ The look, structure and public API follow [docs/design-brief.md](docs/design-bri
 
 - Blog home with search, topic chips, a feature card for the newest post, and pagination
 - Post page: table of contents that follows scrolling, reading progress bar, reading time, share row, previous / next, related posts, author card
-- Topics: a page listing all topics and a page per topic
+- Category pages (filterable by content type), content-type hubs, topic pages and an author page; articles at `/blog/<slug>`
+- Sitemap at `/blog/sitemap.xml` and structured data on articles; old addresses redirect
 - Admin CMS at `/admin`: overview, posts list with filters, Markdown editor with live preview, direct image uploads to Cloudinary, topics with suggestions, save draft / publish / unpublish, duplicate, archive and delete; categories, tags (rename, merge) and profile pages
 - Categories, content types (Explainer, How-to, Troubleshooting, Comparison) and topics on every post
 - Photo galleries and click-to-play YouTube videos inside posts
@@ -87,15 +88,14 @@ docs/main-site-api.md     # The API the main site reads
 prisma/schema.prisma  # Post and User models
 src/
 ├── app/
-│   ├── (site)/     # Public pages (home, posts, tags, about) with menu and footer
-│   ├── admin/      # CMS: post list, new post, edit
-│   ├── login/
-│   └── api/        # posts (public GET, admin writes), upload, auth
+│   ├── (site)/     # Public pages (home, article, category, type, tag, author, about) with menu and footer
+│   ├── admin/      # CMS: login, overview, posts, editor, categories, tags, profile
+│   └── api/        # posts (public GET, admin writes), auth
 ├── components/     # layout, blog, mdx (Markdown renderer), admin, auth, media, brand
 ├── lib/            # prisma, auth, require-admin, cloudinary, posts helpers, toc, ui classes
 ├── providers/      # Auth.js session provider (admin and login only)
 ├── scripts/        # create-admin.js
-├── services/posts/ # queries, actions and validation for posts
+├── services/       # posts, taxonomy (categories, tags), users, uploads
 └── proxy.js        # Protects /admin routes via the Auth.js session (Next.js 16 proxy)
 ```
 
