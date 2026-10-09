@@ -97,6 +97,8 @@ src/
 
 The site tells search engines not to index it until `BLOG_INDEXABLE=true` is set in the blog's Vercel project (then redeploy). `/admin` and `/login` always stay hidden.
 
+Until `BLOG_LAUNCHED=true` is set in the same place, the production deployment shows visitors a "coming soon" page instead of the blog. The admin still works, and preview deployments show the real blog.
+
 ## Scripts
 
 | Command         | Description             |

@@ -1,3 +1,4 @@
+import { COMING_SOON } from "@/lib/coming-soon";
 import { requireAdmin } from "@/lib/require-admin";
 import { createPost } from "@/services/posts/actions";
 import { getLatestPosts } from "@/services/posts/queries";
@@ -27,7 +28,8 @@ export async function GET(request) {
       : DEFAULT_LIMIT;
 
   try {
-    const posts = await getLatestPosts(limit);
+    // Nothing to link to while the blog shows the "coming soon" page.
+    const posts = COMING_SOON ? [] : await getLatestPosts(limit);
 
     return NextResponse.json(
       { posts },

@@ -111,6 +111,8 @@ Credentials provider only (email + bcrypt hash on `User.passwordHash`), JWT sess
 
 `BLOG_INDEXABLE=true` lets search engines index the public pages; anything else keeps the whole site `noindex`. It is off until launch.
 
+`BLOG_LAUNCHED`: until it is `true`, the production deployment (`VERCEL_ENV=production`) answers every public address with the "coming soon" page (`src/lib/coming-soon.js`, the rewrite in `src/proxy.js`, page in `src/app/coming-soon/`) and `GET /api/posts` returns no posts. `/admin` and the sign-in page stay open. Local runs and preview deployments are not affected; to see the page locally, start the server with `VERCEL_ENV=production`.
+
 These belong to the blog's own Vercel project, not the main site's.
 
 ## Git workflow
