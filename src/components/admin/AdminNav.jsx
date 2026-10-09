@@ -5,12 +5,13 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef } from "react";
 
-// Categories, Tags and Profile are added here as their pages are built
-// (docs/BLOG_ADMIN_SPEC.md steps 12–14).
 const links = [
   { href: "/admin", label: "Overview", exact: true },
   { href: "/admin/posts", label: "Posts", exact: true },
   { href: "/admin/posts/new", label: "New post" },
+  { href: "/admin/categories", label: "Categories" },
+  { href: "/admin/tags", label: "Tags" },
+  { href: "/admin/profile", label: "Profile" },
   { href: "/", label: "View site", external: true },
 ];
 
