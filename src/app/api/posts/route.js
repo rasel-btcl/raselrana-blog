@@ -1,92 +1,78 @@
-import { UPLOAD_FOLDER } from "@/lib/cloudinary";
-import { prisma } from "@/lib/prisma";
-import { requireAdmin } from "@/lib/require-admin";
+import { canSetStatus } from "@/lib/authz";
+import { requireApiUser } from "@/lib/require-admin";
+import { createPost, PostError } from "@/services/posts/actions";
+import { getPostsForMainSite } from "@/services/posts/queries";
+import { parsePostInput } from "@/services/posts/validation";
 import { NextResponse } from "next/server";
 
-const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
-const MAX_TITLE_LENGTH = 200;
-const MAX_SLUG_LENGTH = 120;
-const MAX_CONTENT_LENGTH = 200_000;
+const DEFAULT_LIMIT = 6;
+const MAX_LIMIT = 12;
 
-const CLOUDINARY_URL_PREFIX = `https://res.cloudinary.com/${process.env.CLOUDINARY_CLOUD_NAME}/`;
+function fail(status, error) {
+  return NextResponse.json({ error }, { status });
+}
 
-function badRequest(error) {
-  return NextResponse.json({ error }, { status: 400 });
+/**
+ * Public: newest posts for the main site's "Latest writing" section.
+ * Only posts with "Show on main site" switched on are returned.
+ * The response shape is a contract with the main site — see docs/main-site-api.md.
+ */
+export async function GET(request) {
+  const raw = new URL(request.url).searchParams.get("limit");
+  const parsed = Number(raw);
+  const limit =
+    raw !== null &&
+    Number.isInteger(parsed) &&
+    parsed >= 1 &&
+    parsed <= MAX_LIMIT
+      ? parsed
+      : DEFAULT_LIMIT;
+
+  try {
+    const posts = await getPostsForMainSite(limit);
+
+    return NextResponse.json(
+      { posts },
+      {
+        headers: {
+          "Cache-Control":
+            "public, s-maxage=300, stale-while-revalidate=600",
+        },
+      },
+    );
+  } catch (error) {
+    console.error("Latest posts error:", error);
+    return fail(500, "Failed to load posts");
+  }
 }
 
 export async function POST(request) {
-  const { response } = await requireAdmin();
+  const { user, response } = await requireApiUser();
   if (response) return response;
 
   let body;
   try {
     body = await request.json();
   } catch {
-    return badRequest("Invalid JSON body");
+    return fail(400, "Invalid JSON body");
   }
 
-  if (
-    typeof body?.title !== "string" ||
-    typeof body?.slug !== "string" ||
-    typeof body?.content !== "string"
-  ) {
-    return badRequest("Missing required fields");
-  }
-
-  const title = body.title.trim();
-  const slug = body.slug.trim().toLowerCase();
-  const content = body.content;
-
-  if (!title || !slug || !content.trim()) {
-    return badRequest("Missing required fields");
-  }
-  if (title.length > MAX_TITLE_LENGTH) {
-    return badRequest(`Title must be ${MAX_TITLE_LENGTH} characters or fewer`);
-  }
-  if (slug.length > MAX_SLUG_LENGTH || !SLUG_PATTERN.test(slug)) {
-    return badRequest(
-      "Slug may only contain lowercase letters, numbers and single hyphens",
-    );
-  }
-  if (content.length > MAX_CONTENT_LENGTH) {
-    return badRequest("Content is too long");
-  }
-
-  // Only accept a cover that came from our own Cloudinary upload folder.
-  let coverUrl = null;
-  let coverPublicId = null;
-  if (body.coverImage != null) {
-    const { url, publicId } = body.coverImage;
-    if (
-      typeof url !== "string" ||
-      typeof publicId !== "string" ||
-      !url.startsWith(CLOUDINARY_URL_PREFIX) ||
-      !publicId.startsWith(`${UPLOAD_FOLDER}/`)
-    ) {
-      return badRequest("Invalid cover image");
-    }
-    coverUrl = url;
-    coverPublicId = publicId;
+  const { data, error } = parsePostInput(body);
+  if (error) return fail(400, error);
+  if (!canSetStatus(user, data.status)) {
+    return fail(403, "Only an admin can publish");
   }
 
   try {
-    const post = await prisma.post.create({
-      data: { title, slug, content, coverUrl, coverPublicId, published: false },
-    });
-
+    const post = await createPost(data, user);
     return NextResponse.json({ post }, { status: 201 });
   } catch (error) {
+    if (error instanceof PostError) return fail(error.status, error.message);
     if (error?.code === "P2002") {
-      return NextResponse.json(
-        { error: "A post with this slug already exists" },
-        { status: 409 },
-      );
+      return fail(409, "A post with this slug already exists");
     }
 
     console.error("Post creation error:", error);
-    return NextResponse.json(
-      { error: "Failed to create post" },
-      { status: 500 },
-    );
+    return fail(500, "Failed to create post");
   }
 }

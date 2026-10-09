@@ -1,3 +1,6 @@
+// Data model. Built from docs/BLOG_ADMIN_SPEC.md §5; the differences from the spec
+// are listed in its section 2 ("Audit corrections and owner decisions").
+
 generator client {
   provider = "prisma-client-js"
 }
@@ -7,28 +10,118 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model Post {
-  id            String   @id @default(auto()) @map("_id") @db.ObjectId
-  title         String
-  slug          String   @unique
-  excerpt       String?
-  content       String
-  coverUrl      String?
-  coverPublicId String?
-  published     Boolean  @default(false)
-  tags          String[] @default([])
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+enum Role {
+  ADMIN
+  AUTHOR
+}
 
-  @@index([published, createdAt])
-  @@map("posts")
+enum PostStatus {
+  DRAFT
+  SCHEDULED
+  PUBLISHED
+  ARCHIVED
+}
+
+enum ContentType {
+  EXPLAINER
+  HOWTO
+  TROUBLESHOOTING
+  COMPARISON
 }
 
 model User {
   id           String   @id @default(auto()) @map("_id") @db.ObjectId
   name         String
+  username     String   @unique
   email        String   @unique
   passwordHash String
-  role         String   @default("admin")
+  role         Role     @default(ADMIN)
+  isActive     Boolean  @default(true)
+  avatarUrl    String?
+  bio          String?
+  website      String? // e.g. https://raselrana.com.bd
+  socialLinks  Json? // { linkedin, github, facebook, x }
+  posts        Post[]
   createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Category {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  name        String
+  slug        String   @unique
+  description String?
+  sortOrder   Int      @default(0)
+  posts       Post[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Tag {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  name      String
+  slug      String   @unique
+  postIds   String[] @db.ObjectId
+  posts     Post[]   @relation(fields: [postIds], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Post {
+  id            String      @id @default(auto()) @map("_id") @db.ObjectId
+  title         String
+  slug          String      @unique
+  previousSlugs String[]    @default([]) // old slugs; redirect to the current slug
+  excerpt       String      @default("") // filled from the content on save when left empty
+  content       String // Markdown source
+  contentType   ContentType @default(EXPLAINER)
+  status        PostStatus  @default(DRAFT)
+
+  // Images
+  featuredImage Json? // { url, publicId, width, height, alt }
+
+  // Relations
+  authorId       String    @db.ObjectId
+  author         User      @relation(fields: [authorId], references: [id])
+  // Optional here because drafts may be incomplete; required to publish (validation.js).
+  categoryId     String?   @db.ObjectId
+  category       Category? @relation(fields: [categoryId], references: [id])
+  tagIds         String[]  @db.ObjectId
+  tags           Tag[]     @relation(fields: [tagIds], references: [id])
+  relatedPostIds String[]  @db.ObjectId // manual picks; no Prisma relation
+
+  // Dates
+  publishedAt      DateTime? // set on first publish; future date + SCHEDULED = scheduled
+  contentUpdatedAt DateTime? // "Last updated" shown to readers; set only on a significant update
+
+  // Derived
+  readingTime Int @default(1) // minutes, computed on save
+
+  // SEO
+  seoTitle       String?
+  seoDescription String?
+  ogImageUrl     String?
+  canonicalUrl   String?
+  noindex        Boolean @default(false)
+
+  // When false the post is left out of the main-site API (docs/main-site-api.md).
+  showOnMainSite Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt // technical edit time; NOT shown to readers
+
+  @@index([status, publishedAt])
+  @@index([categoryId, status, publishedAt])
+  @@index([contentType, status, publishedAt])
+  @@index([previousSlugs])
+  @@map("posts")
+}
+
+model LoginAttempt {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  key       String // email + ":" + ip
+  success   Boolean
+  createdAt DateTime @default(now())
+
+  @@index([key, createdAt])
 }

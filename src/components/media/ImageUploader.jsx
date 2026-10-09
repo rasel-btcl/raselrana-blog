@@ -1,52 +1,85 @@
 "use client";
 
-import { useState } from "react";
+import { buttonSmall } from "@/lib/ui";
+import { uploadImage } from "@/lib/upload-client";
+import { ALLOWED_IMAGE_TYPES } from "@/lib/upload-rules";
+import { useRef, useState } from "react";
 
-export default function ImageUploader({ onUploaded }) {
-  const [uploading, setUploading] = useState(false);
+/**
+ * A button that picks an image, uploads it, and calls
+ * `onUploaded({ url, publicId, width, height }, file)`.
+ * With `multiple`, several images can be picked; they upload one after another and
+ * `onUploaded` receives two lists instead: `(images, files)`.
+ * `postId` files the images under that post in Cloudinary.
+ */
+export default function ImageUploader({
+  onUploaded,
+  label = "Upload image",
+  multiple = false,
+  disabled = false,
+  postId = null,
+  kind = "post",
+  className = buttonSmall,
+}) {
+  const inputRef = useRef(null);
+  const [progress, setProgress] = useState(null); // e.g. "2/5" while uploading
   const [error, setError] = useState(null);
 
-  const basePath = process.env.NEXT_PUBLIC_BASE_PATH || "";
-
   const handleFileChange = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = [...(e.target.files ?? [])];
+    e.target.value = ""; // allow picking the same file again
+    if (files.length === 0) return;
 
-    setUploading(true);
     setError(null);
+    const images = [];
+    const uploaded = [];
 
     try {
-      const formData = new FormData();
-      formData.append("file", file);
-
-      const res = await fetch(`${basePath}/api/upload`, {
-        method: "POST",
-        body: formData,
-      });
-
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || "Upload failed");
-
-      onUploaded?.(data); // { url, publicId, width, height }
+      for (const [index, file] of files.entries()) {
+        setProgress(files.length > 1 ? `${index + 1}/${files.length}` : "");
+        images.push(await uploadImage(file, { postId, kind }));
+        uploaded.push(file);
+      }
     } catch (err) {
       console.error(err);
       setError(err.message || "Image upload failed. Please try again.");
     } finally {
-      setUploading(false);
+      setProgress(null);
     }
+
+    // Keep whatever did upload, even if a later file failed.
+    if (images.length === 0) return;
+    if (multiple) onUploaded?.(images, uploaded);
+    else onUploaded?.(images[0], uploaded[0]);
   };
 
+  const uploading = progress !== null;
+
   return (
-    <div className="space-y-2">
+    <div className="inline-flex flex-wrap items-center gap-3">
       <input
+        ref={inputRef}
         type="file"
-        accept="image/*"
+        accept={ALLOWED_IMAGE_TYPES.join(",")}
+        multiple={multiple}
         onChange={handleFileChange}
-        disabled={uploading}
-        className="block w-full text-sm text-gray-700 file:mr-4 file:rounded-md file:border-0 file:bg-gray-100 file:px-4 file:py-2 file:text-sm file:font-medium hover:file:bg-gray-200"
+        className="sr-only"
+        tabIndex={-1}
+        aria-hidden
       />
-      {uploading && <p className="text-sm text-gray-500">Uploading…</p>}
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      <button
+        type="button"
+        onClick={() => inputRef.current?.click()}
+        disabled={disabled || uploading}
+        className={className}
+      >
+        {uploading ? `Uploading… ${progress}`.trim() : label}
+      </button>
+      {error && (
+        <p role="alert" className="text-sm text-[var(--danger)]">
+          {error}
+        </p>
+      )}
     </div>
   );
 }

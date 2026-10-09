@@ -1,36 +1,46 @@
-import AuthProvider from "@/providers/auth-provider";
+import { SITE_URL } from "@/lib/posts";
 import { Analytics } from "@vercel/analytics/next";
+import { ThemeProvider } from "next-themes";
+import { plexMono, plexSans, spaceGrotesk } from "./fonts";
 import "./globals.css";
 
+const description =
+  "Writing by Rasel Rana, Manager (Technical) at BTCL, on telecommunications, electrical engineering and the systems behind them.";
+
 export const metadata = {
-  metadataBase: new URL("https://raselrana.com.bd"),
-  title: "Rasel Rana — Blog (Coming Soon)",
-  description:
-    "The technical blog of Rasel Rana, Manager (Technical) at BTCL and Electrical & Electronic Engineer. Currently under development.",
+  metadataBase: new URL(SITE_URL),
+  title: {
+    default: "Blog — Rasel Rana",
+    template: "%s — Rasel Rana",
+  },
+  description,
   openGraph: {
-    title: "Rasel Rana — Blog",
-    description: "Currently under development. Check back soon.",
-    url: "https://raselrana.com.bd/blog",
-    siteName: "Rasel Rana — Blog",
+    title: "Blog — Rasel Rana",
+    description,
+    url: "/blog",
+    siteName: "Rasel Rana",
     type: "website",
   },
-  robots: {
-    index: false,
-    follow: false,
-  },
+  // Hidden from search engines until BLOG_INDEXABLE=true is set at launch.
+  robots:
+    process.env.BLOG_INDEXABLE === "true"
+      ? { index: true, follow: true }
+      : { index: false, follow: false },
 };
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en">
-      <body>
-        <AuthProvider>
+    <html
+      lang="en"
+      suppressHydrationWarning
+      className={`${spaceGrotesk.variable} ${plexSans.variable} ${plexMono.variable}`}
+    >
+      <body className="bg-[var(--paper)] font-body text-[var(--ink)]">
+        {/* Same settings and storage key as the main site, so the chosen theme carries over. */}
+        <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
           {children}
-          <Analytics
-          /* this is for Vercel Analytics, you can remove it if you don&apos;t
-        want analytics */
-          />
-        </AuthProvider>
+        </ThemeProvider>
+        <Analytics />
       </body>
     </html>
   );

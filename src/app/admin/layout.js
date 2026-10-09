@@ -1,9 +1,12 @@
-import { auth } from "@/lib/auth";
-import { redirect } from "next/navigation";
+import AuthProvider from "@/providers/auth-provider";
 
-export default async function AdminLayout({ children }) {
-  const session = await auth();
-  if (!session) redirect("/login");
+// Shared by the sign-in page and the panel. The panel's own layout
+// (admin/(panel)/layout.js) adds the access check and the sidebar.
+export const metadata = {
+  title: { default: "Admin", template: "%s — Blog admin" },
+  robots: { index: false, follow: false },
+};
 
-  return <div>{children}</div>;
+export default function AdminRootLayout({ children }) {
+  return <AuthProvider>{children}</AuthProvider>;
 }
