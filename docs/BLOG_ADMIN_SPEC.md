@@ -642,9 +642,9 @@ Statuses below are from the audit of 2026-10-09 and are updated as steps are bui
 | 9 | Post editor (save) | ✅ | CodeMirror editor with toolbar (H2, H3, bold, italic, link, code, table, callout, image, gallery, video) and Ctrl+S / B / I. All settings fields incl. SEO, related posts (a pick list, not a search box), publish date in Dhaka time, noindex, "Show on main site". zod validation on the server. |
 | 10 | Preview + autosave | ✅ | `/preview/[id]` (editors only, noindex, never cached) shares `PostArticle` with the public page. Drafts autosave 3 s after the last change; the first autosave creates the draft. The in-editor preview stays instant (same renderer) instead of an iframe, by decision. Leaving with unsaved changes warns. |
 | 11 | Publish flow + checklist | ✅ | Publish / Schedule / Update / Unpublish / Archive, significant update, pre-publish checklist with blocking errors (incl. slug taken) and warnings, targeted revalidation. |
-| 12 | Categories admin | ❌ | |
-| 13 | Tags admin | ❌ | |
-| 14 | Profile | ❌ | |
+| 12 | Categories admin | ✅ | `/admin/categories`: list with post counts, add / edit, up / down, delete only when empty ("Move posts first"). |
+| 13 | Tags admin | ✅ | `/admin/tags`: search, paging, rename, merge with a confirmation step, delete one or all unused. |
+| 14 | Profile | ✅ | `/admin/profile`: name, username, avatar, bio, website, social links; change password (12+ characters, bcrypt). |
 | 15 | Public taxonomy pages | ⚠️ | Topic pages at `/tags`, article at `/posts/<slug>`. Decision: new addresses with redirects (section 2). |
 | 16 | Redirects + sitemap/RSS/JSON-LD | ❌ | RSS is not built by decision. |
 | 17 | Final security + acceptance pass | ❌ | |

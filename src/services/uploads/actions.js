@@ -11,6 +11,8 @@ const inputSchema = z.object({
     .string()
     .regex(/^[a-f0-9]{24}$/i)
     .nullish(),
+  // "avatar" files the image under avatars/ instead of a post.
+  kind: z.enum(["post", "avatar"]).default("post"),
 });
 
 /**
@@ -36,7 +38,10 @@ export async function signImageUpload(input) {
 
   // Everything Cloudinary should enforce has to be part of the signature.
   const params = {
-    folder: `${UPLOAD_FOLDER}/posts/${parsed.data.postId ?? "unassigned"}`,
+    folder:
+      parsed.data.kind === "avatar"
+        ? `${UPLOAD_FOLDER}/avatars`
+        : `${UPLOAD_FOLDER}/posts/${parsed.data.postId ?? "unassigned"}`,
     allowed_formats: ALLOWED_IMAGE_FORMATS.join(","),
     timestamp: Math.round(Date.now() / 1000),
   };

@@ -32,7 +32,7 @@ The look, structure and public API follow [docs/design-brief.md](docs/design-bri
 - Blog home with search, topic chips, a feature card for the newest post, and pagination
 - Post page: table of contents that follows scrolling, reading progress bar, reading time, share row, previous / next, related posts, author card
 - Topics: a page listing all topics and a page per topic
-- Admin CMS at `/admin`: overview, posts list with filters, Markdown editor with live preview, direct image uploads to Cloudinary, topics with suggestions, save draft / publish / unpublish, duplicate, archive and delete
+- Admin CMS at `/admin`: overview, posts list with filters, Markdown editor with live preview, direct image uploads to Cloudinary, topics with suggestions, save draft / publish / unpublish, duplicate, archive and delete; categories, tags (rename, merge) and profile pages
 - Categories, content types (Explainer, How-to, Troubleshooting, Comparison) and topics on every post
 - Photo galleries and click-to-play YouTube videos inside posts
 - Per-post "Show on main site" option, and a public API for the main site's "Latest writing" section: `GET /blog/api/posts?limit=3` ([docs/main-site-api.md](docs/main-site-api.md))

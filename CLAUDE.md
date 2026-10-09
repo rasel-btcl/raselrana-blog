@@ -72,6 +72,7 @@ Links to the main site go through `components/layout/MainSiteLink.jsx`: a plain 
 - `src/app/admin/login/` — the sign-in page. It must stay outside the `(panel)` group, or the access check would redirect it to itself.
 - `src/app/admin/(panel)/` — the signed-in area: its layout checks the user, renders the sidebar (`components/admin/AdminNav.jsx`) and is `force-dynamic`. Overview at `/admin`, posts at `/admin/posts`, editor at `/admin/posts/new` and `/admin/posts/[id]/edit`.
 - Row actions on the posts list are server actions in `admin/(panel)/posts/actions.js`. A server action can be called without loading the page, so each one calls `requireUser()` / `requireRole()` and validates its input with zod.
+- Categories, tags and profile (`admin/(panel)/categories|tags|profile`) are plain server-rendered forms. Their actions go through `runAdminAction()` in `src/lib/admin-action.js`, which checks the user (ADMIN unless `admin: false`), turns zod / `ActionError` / duplicate-key problems into a message, and redirects back with `?ok=` or `?error=` for `components/admin/Notice.jsx`. Throw `ActionError` for anything the person can fix. The logic and zod schemas live in `src/services/taxonomy/` and `src/services/users/`.
 
 ### Data layer
 
@@ -88,6 +89,8 @@ All post access goes through `src/services/posts/`:
 - `revalidate.js` — `revalidatePosts(before, after)` refreshes the pages a post is on. Any new write path must call it, or statically rendered pages such as `/tags` go stale.
 
 `publishedAt` is the first publish time, or for a `SCHEDULED` post the time it goes live (`nextPublishedAt()` in `actions.js` holds the rules: unpublishing keeps it, a future date is dropped when a post goes back to draft, publishing a never-public post stamps now). Scheduling needs no cron: `livePostWhere()` compares with the clock. `updatedAt` changes on every save and is never shown to readers; `contentUpdatedAt` ("Last updated") is set only by a deliberate significant update. `showOnMainSite` only affects the main-site API.
+
+A `Tag` that was never attached to a post has no `postIds` field in MongoDB, and Prisma's `isEmpty` filter does not match a missing field; count unused topics in JavaScript (`getUnusedTagIds()` in `src/services/taxonomy/tags.js`).
 
 Old documents may still carry the pre-spec fields (`published`, `coverUrl`, `coverPublicId`, a `tags` text list). Prisma ignores them; do not rely on them.
 
@@ -118,7 +121,7 @@ Four conventions go beyond plain Markdown, both decided by looking at a paragrap
 
 ### Images
 
-Uploads go **straight from the browser to Cloudinary**; no file passes through this app. `signImageUpload()` (a server action in `src/services/uploads/actions.js`, guarded by `requireUser()`) signs the folder, the allowed formats and a timestamp; `src/lib/upload-client.js` then posts the file with those fields. Anything Cloudinary should enforce must be in the signed parameters. Images land in `<UPLOAD_FOLDER>/posts/<post-id>/` (`unassigned` for a post not saved yet). The rules shared by both sides (formats, 5 MB, no SVG) are in `src/lib/upload-rules.js`; the size limit is checked in the browser only.
+Uploads go **straight from the browser to Cloudinary**; no file passes through this app. `signImageUpload()` (a server action in `src/services/uploads/actions.js`, guarded by `requireUser()`) signs the folder, the allowed formats and a timestamp; `src/lib/upload-client.js` then posts the file with those fields. Anything Cloudinary should enforce must be in the signed parameters. Images land in `<UPLOAD_FOLDER>/posts/<post-id>/` (`unassigned` for a post not saved yet); profile pictures in `<UPLOAD_FOLDER>/avatars/`. The rules shared by both sides (formats, 5 MB, no SVG) are in `src/lib/upload-rules.js`; the size limit is checked in the browser only.
 
 `next.config.mjs` sets a global `next/image` loader, `src/lib/cloudinary-loader.js`, which inserts `f_auto,q_auto,c_limit,w_<width>` into Cloudinary addresses. That file is imported by client code too, so it must not import the Cloudinary SDK (`src/lib/cloudinary.js` is server only).
 

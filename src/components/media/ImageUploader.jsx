@@ -18,6 +18,7 @@ export default function ImageUploader({
   multiple = false,
   disabled = false,
   postId = null,
+  kind = "post",
   className = buttonSmall,
 }) {
   const inputRef = useRef(null);
@@ -36,7 +37,7 @@ export default function ImageUploader({
     try {
       for (const [index, file] of files.entries()) {
         setProgress(files.length > 1 ? `${index + 1}/${files.length}` : "");
-        images.push(await uploadImage(file, { postId }));
+        images.push(await uploadImage(file, { postId, kind }));
         uploaded.push(file);
       }
     } catch (err) {
