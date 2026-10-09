@@ -57,7 +57,7 @@ This app is one zone of `raselrana.com.bd`. It is deployed as its own Vercel pro
 The basePath is the main source of subtle bugs here:
 
 - `next/link`, `next/navigation` `redirect()` and `router.push()` add it automatically — write paths without `/blog`.
-- Client-side `fetch` calls, native `<form action>` and `signOut({ callbackUrl })` do not get it; they prefix `process.env.NEXT_PUBLIC_BASE_PATH` (`src/lib/upload-client.js`, `PostEditor`, `SearchForm`, `SignOutButton`).
+- Client-side `fetch` calls, native `<form action>` and `signOut({ callbackUrl })` do not get it; they prefix `process.env.NEXT_PUBLIC_BASE_PATH` (`PostEditor`, `SearchForm`, the posts-list filter form, `SignOutButton`). Server actions need nothing.
 - Auth.js needs it stated explicitly: the server config uses `basePath: "/api/auth"` (`src/lib/auth.js`), while the client `SessionProvider` uses `${NEXT_PUBLIC_BASE_PATH}/api/auth` (`src/providers/auth-provider.js`). The `pages` paths in the Auth.js config are used verbatim, so they include the prefix. `AUTH_URL` must match the deployed origin.
 - In `src/proxy.js` the request passed by the `auth()` wrapper has lost the basePath (`req.nextUrl.clone()` does not restore it), so the login redirect is built from `NEXT_PUBLIC_BASE_PATH`.
 - Metadata URLs (canonical, Open Graph) are written in full via `postUrl()` / `BLOG_URL` in `src/lib/posts.js`.
@@ -97,14 +97,17 @@ Addresses are built by `postPath()` / `tagPath()` in `src/lib/posts.js`. They cu
 
 `src/components/mdx/Markdown.jsx` is the single renderer (GFM, heading ids, syntax highlighting, raw HTML dropped, external links in a new tab, Cloudinary-resized images). It has no `"use client"` so the post page renders it on the server and `PostEditor` reuses it for the live preview; keep it free of server-only imports. Its output must sit inside an element with class `article` (styles in `globals.css`).
 
-Two conventions go beyond plain Markdown, both decided by looking at a paragraph's contents:
+Three conventions go beyond plain Markdown, both decided by looking at a paragraph's contents:
 
 - two or more images with nothing else in the paragraph (image lines directly under each other) render as a photo grid (`.gallery`), each linking to the full-size image;
+- one image with a title, `![alt](url "caption")`, renders as a `<figure>` with that caption;
 - a bare YouTube address alone in a paragraph renders as `YouTubeEmbed` (thumbnail and play button; the player loads from `youtube-nocookie.com` only on click, and without JavaScript it is a plain link). A YouTube link inside a sentence stays a link. Parsing is in `src/lib/youtube.js`.
 
 `src/lib/toc.js` builds the table of contents with the same slugger order as `rehype-slug`, so ids match the rendered headings.
 
 ### Images
+
+Uploads go **straight from the browser to Cloudinary**; no file passes through this app. `signImageUpload()` (a server action in `src/services/uploads/actions.js`, guarded by `requireUser()`) signs the folder, the allowed formats and a timestamp; `src/lib/upload-client.js` then posts the file with those fields. Anything Cloudinary should enforce must be in the signed parameters. Images land in `<UPLOAD_FOLDER>/posts/<post-id>/` (`unassigned` for a post not saved yet). The rules shared by both sides (formats, 5 MB, no SVG) are in `src/lib/upload-rules.js`; the size limit is checked in the browser only.
 
 `next.config.mjs` sets a global `next/image` loader, `src/lib/cloudinary-loader.js`, which inserts `f_auto,q_auto,c_limit,w_<width>` into Cloudinary addresses. That file is imported by client code too, so it must not import the Cloudinary SDK (`src/lib/cloudinary.js` is server only).
 
@@ -123,7 +126,6 @@ Login rate limiting (`src/lib/login-rate-limit.js`): every attempt is stored as 
 - `GET /api/posts?limit=` — **public, and a contract with the main site** (its home page shows the newest posts). Only listed posts with `showOnMainSite` on. The shape, caching header and rules are in `docs/main-site-api.md`; fields may be added but not removed or renamed, and never content or ids.
 - `POST /api/posts`, `PATCH /api/posts/[id]` — any signed-in user who may edit the post; setting a status other than `DRAFT` needs `ADMIN`. The editor always sends the full post, including `status`.
 - `DELETE /api/posts/[id]` — `ADMIN`, and only for a draft that was never published (409 otherwise; archive instead).
-- `POST /api/upload` — signed-in users; JPEG/PNG/WebP/GIF/AVIF, max 4 MB (Vercel's request body limit), stored in `UPLOAD_FOLDER`. To be replaced by signed direct uploads in spec step 8.
 
 ## Not built / leftovers
 

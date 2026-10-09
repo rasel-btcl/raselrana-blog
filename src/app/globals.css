@@ -252,6 +252,17 @@ dialog::backdrop {
 
 .article del { color: var(--slate); }
 
+.article figure { margin: 1.5em 0; }
+.article figure img { margin: 0; }
+
+.article figcaption {
+  margin-top: 0.6em;
+  font-size: 0.85em;
+  line-height: 1.5;
+  color: var(--slate);
+  text-align: center;
+}
+
 /* Photos placed together in a post (Markdown.jsx): two columns, three on wide screens. */
 .article .gallery {
   display: grid;

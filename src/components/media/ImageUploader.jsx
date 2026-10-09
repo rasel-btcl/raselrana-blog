@@ -2,6 +2,7 @@
 
 import { buttonSmall } from "@/lib/ui";
 import { uploadImage } from "@/lib/upload-client";
+import { ALLOWED_IMAGE_TYPES } from "@/lib/upload-rules";
 import { useRef, useState } from "react";
 
 /**
@@ -9,12 +10,14 @@ import { useRef, useState } from "react";
  * `onUploaded({ url, publicId, width, height }, file)`.
  * With `multiple`, several images can be picked; they upload one after another and
  * `onUploaded` receives two lists instead: `(images, files)`.
+ * `postId` files the images under that post in Cloudinary.
  */
 export default function ImageUploader({
   onUploaded,
   label = "Upload image",
   multiple = false,
   disabled = false,
+  postId = null,
 }) {
   const inputRef = useRef(null);
   const [progress, setProgress] = useState(null); // e.g. "2/5" while uploading
@@ -32,7 +35,7 @@ export default function ImageUploader({
     try {
       for (const [index, file] of files.entries()) {
         setProgress(files.length > 1 ? `${index + 1}/${files.length}` : "");
-        images.push(await uploadImage(file));
+        images.push(await uploadImage(file, { postId }));
         uploaded.push(file);
       }
     } catch (err) {
@@ -55,7 +58,7 @@ export default function ImageUploader({
       <input
         ref={inputRef}
         type="file"
-        accept="image/jpeg,image/png,image/webp,image/gif,image/avif"
+        accept={ALLOWED_IMAGE_TYPES.join(",")}
         multiple={multiple}
         onChange={handleFileChange}
         className="sr-only"

@@ -36,6 +36,21 @@ function galleryImages(node) {
     .filter((image) => typeof image.src === "string" && image.src);
 }
 
+/** The image of a paragraph that holds one image with a title: `![alt](url "caption")`. */
+function captionedImage(node) {
+  const children = meaningfulChildren(node);
+  if (children.length !== 1) return null;
+
+  const [image] = children;
+  if (image.type !== "element" || image.tagName !== "img") return null;
+
+  const { src, alt = "", title } = image.properties ?? {};
+  if (typeof src !== "string" || typeof title !== "string" || !title.trim()) {
+    return null;
+  }
+  return { src, alt, caption: title.trim() };
+}
+
 /** The video of a paragraph that holds only a bare YouTube link. */
 function soleYouTubeLink(node) {
   const children = meaningfulChildren(node);
@@ -86,6 +101,24 @@ const components = {
       );
     }
 
+    const figure = captionedImage(node);
+    if (figure) {
+      return (
+        <figure>
+          {/* eslint-disable-next-line @next/next/no-img-element -- Cloudinary does the resizing */}
+          <img
+            src={cloudinaryUrl(figure.src, 1200)}
+            srcSet={cloudinarySrcSet(figure.src, IMAGE_WIDTHS)}
+            sizes="(min-width: 768px) 720px, 100vw"
+            alt={figure.alt}
+            loading="lazy"
+            decoding="async"
+          />
+          <figcaption>{figure.caption}</figcaption>
+        </figure>
+      );
+    }
+
     return <p {...props}>{children}</p>;
   },
   // Links to other sites open in a new tab.
@@ -101,7 +134,8 @@ const components = {
       </a>
     );
   },
-  img({ node, src, alt = "", ...props }) {
+  // `title` is the caption (see captionedImage); it is not repeated as a tooltip.
+  img({ node, src, alt = "", title, ...props }) {
     if (!src) return null;
     return (
       // eslint-disable-next-line @next/next/no-img-element -- size is unknown for Markdown images; Cloudinary does the resizing
@@ -136,7 +170,8 @@ const rehypePlugins = [rehypeSlug, rehypeHighlight];
  *
  * Two things go beyond plain Markdown:
  * - two or more images with no text between them render as a photo grid;
- * - a YouTube address on a line of its own renders as a click-to-play video.
+ * - a YouTube address on a line of its own renders as a click-to-play video;
+ * - an image with a title, `![alt](url "caption")`, renders with that caption under it.
  */
 export default function Markdown({ children }) {
   return (

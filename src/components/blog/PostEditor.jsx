@@ -123,8 +123,22 @@ export default function PostEditor({
     });
   };
 
+  // Ask what the picture shows (alt text) and, optionally, for a caption.
   const insertImage = (image, file) => {
-    insertBlock(`![${altFromFile(file)}](${image.url})`);
+    // Characters that would break the Markdown image syntax are dropped.
+    const clean = (text) => (text ?? "").replace(/[\[\]"\r\n]/g, " ").trim();
+    const alt = clean(
+      window.prompt(
+        "Describe the image for readers who cannot see it (alt text)",
+        altFromFile(file),
+      ),
+    );
+    const caption = clean(
+      window.prompt("Caption shown under the image (optional)", ""),
+    );
+    insertBlock(
+      caption ? `![${alt}](${image.url} "${caption}")` : `![${alt}](${image.url})`,
+    );
   };
 
   // Images on consecutive lines (no blank line between) render as one photo grid.
@@ -465,6 +479,7 @@ export default function PostEditor({
             <div className="min-w-0 flex-1 basis-64 space-y-3">
               <div className="flex flex-wrap gap-3">
                 <ImageUploader
+                  postId={post?.id}
                   label={featuredImage ? "Replace image" : "Upload image"}
                   onUploaded={(image) =>
                     setFeaturedImage({
@@ -541,8 +556,13 @@ export default function PostEditor({
             Content (Markdown) and live preview
           </p>
           <div className="flex flex-wrap gap-2">
-            <ImageUploader label="Insert image" onUploaded={insertImage} />
             <ImageUploader
+              postId={post?.id}
+              label="Insert image"
+              onUploaded={insertImage}
+            />
+            <ImageUploader
+              postId={post?.id}
               label="Insert gallery"
               multiple
               onUploaded={insertGallery}
