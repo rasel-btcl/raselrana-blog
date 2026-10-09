@@ -14,30 +14,30 @@ This is a standalone Next.js (App Router) application, integrated into the main 
 
 ## Tech Stack
 
-| Layer               | Choice                                      |
-| ------------------- | ------------------------------------------- |
-| Framework           | Next.js (App Router)                        |
-| Styling             | Tailwind CSS v4                             |
-| Database            | MongoDB (Atlas) + Prisma 6                  |
-| Image storage       | Cloudinary                                  |
-| Auth                | Auth.js v5 (email + password, admin only)   |
-| Content (planned)   | MDX (compiled from DB-stored Markdown/MDX)  |
-| Hosting             | Vercel (Hobby)                              |
+| Layer               | Choice                                              |
+| ------------------- | --------------------------------------------------- |
+| Framework           | Next.js (App Router)                                |
+| Styling             | Tailwind CSS v4, design tokens shared with the main site |
+| Theme               | next-themes (light / dark, shared with the main site) |
+| Database            | MongoDB (Atlas) + Prisma 6                          |
+| Image storage       | Cloudinary                                          |
+| Auth                | Auth.js v5 (email + password, admin only)           |
+| Content             | Markdown (react-markdown, GFM, syntax highlighting) |
+| Hosting             | Vercel (Hobby)                                      |
+
+The look, structure and public API follow [docs/design-brief.md](docs/design-brief.md), written by the main site project.
 
 ## Features
 
-Built:
+- Blog home with search, topic chips, a feature card for the newest post, and pagination
+- Post page: table of contents that follows scrolling, reading progress bar, reading time, share row, previous / next, related posts, author card
+- Topics: a page listing all topics and a page per topic
+- Admin CMS at `/admin`: Markdown editor with live preview, cover and inline image upload, topics with suggestions, save draft / publish / unpublish, edit and delete
+- Public API for the main site's "Latest writing" section: `GET /blog/api/posts?limit=3`
+- Light and dark mode that carries over from the main site
+- Edits appear on the public pages at once (`revalidatePath`), no redeploy
 
-- Protected `/admin` area: dashboard and post creation (saved as drafts)
-- Cloudinary cover image uploads (folder `raselrana-blog`, images up to 4 MB)
-- Admin-only API routes with input validation
-
-Planned:
-
-- Public post pages rendered from the database, edit / publish / delete in the CMS
-- MDX rendering with syntax-highlighted code blocks
-- Tags, pagination, search, table of contents, reading time
-- SEO: sitemap, robots.txt, RSS feed, Open Graph images, JSON-LD
+Not included by decision: RSS feed, comments, newsletter, visual editor.
 
 ## Getting Started
 
@@ -77,16 +77,25 @@ The dev server runs at `http://localhost:3000/blog` (`basePath` applies locally 
 ## Project Structure
 
 ```
+docs/design-brief.md  # Design and API specification shared with the main site
 prisma/schema.prisma  # Post and User models
 src/
-├── app/            # Routes: public pages, /login, /admin CMS, API routes
-├── components/     # UI components: auth, blog, media
-├── lib/            # Infra: prisma.js, auth.js, require-admin.js, cloudinary.js
-├── providers/      # Client providers (Auth.js session)
+├── app/
+│   ├── (site)/     # Public pages (home, posts, tags, about) with menu and footer
+│   ├── admin/      # CMS: post list, new post, edit
+│   ├── login/
+│   └── api/        # posts (public GET, admin writes), upload, auth
+├── components/     # layout, blog, mdx (Markdown renderer), admin, auth, media, brand
+├── lib/            # prisma, auth, require-admin, cloudinary, posts helpers, toc, ui classes
+├── providers/      # Auth.js session provider (admin and login only)
 ├── scripts/        # create-admin.js
-├── services/       # Domain logic per entity (placeholders, not built yet)
+├── services/posts/ # queries, actions and validation for posts
 └── proxy.js        # Protects /admin routes via the Auth.js session (Next.js 16 proxy)
 ```
+
+## Going live
+
+The site tells search engines not to index it until `BLOG_INDEXABLE=true` is set in the blog's Vercel project (then redeploy). `/admin` and `/login` always stay hidden.
 
 ## Scripts
 

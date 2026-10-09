@@ -1,10 +1,17 @@
 import PostEditor from "@/components/blog/PostEditor";
+import { getAllTagNames } from "@/services/posts/queries";
 
-export default function NewPostPage() {
+export const metadata = { title: "New post" };
+
+export default async function NewPostPage() {
+  const tagSuggestions = await getAllTagNames();
+
   return (
-    <main className="max-w-3xl mx-auto px-4 py-12">
-      <h1 className="text-2xl font-semibold mb-8">Create New Post</h1>
-      <PostEditor />
-    </main>
+    <>
+      <h1 className="mb-8 font-display text-4xl font-semibold tracking-tight text-[var(--ink)]">
+        New post
+      </h1>
+      <PostEditor tagSuggestions={tagSuggestions} />
+    </>
   );
 }

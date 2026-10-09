@@ -1,17 +1,50 @@
-import { UPLOAD_FOLDER } from "@/lib/cloudinary";
-import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/require-admin";
+import { createPost } from "@/services/posts/actions";
+import { getLatestPosts } from "@/services/posts/queries";
+import { parsePostInput } from "@/services/posts/validation";
 import { NextResponse } from "next/server";
 
-const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
-const MAX_TITLE_LENGTH = 200;
-const MAX_SLUG_LENGTH = 120;
-const MAX_CONTENT_LENGTH = 200_000;
-
-const CLOUDINARY_URL_PREFIX = `https://res.cloudinary.com/${process.env.CLOUDINARY_CLOUD_NAME}/`;
+const DEFAULT_LIMIT = 6;
+const MAX_LIMIT = 12;
 
 function badRequest(error) {
   return NextResponse.json({ error }, { status: 400 });
+}
+
+/**
+ * Public: newest published posts for the main site's "Latest writing" section.
+ * The response shape is a contract with the main site — see docs/design-brief.md §8.
+ */
+export async function GET(request) {
+  const raw = new URL(request.url).searchParams.get("limit");
+  const parsed = Number(raw);
+  const limit =
+    raw !== null &&
+    Number.isInteger(parsed) &&
+    parsed >= 1 &&
+    parsed <= MAX_LIMIT
+      ? parsed
+      : DEFAULT_LIMIT;
+
+  try {
+    const posts = await getLatestPosts(limit);
+
+    return NextResponse.json(
+      { posts },
+      {
+        headers: {
+          "Cache-Control":
+            "public, s-maxage=300, stale-while-revalidate=600",
+        },
+      },
+    );
+  } catch (error) {
+    console.error("Latest posts error:", error);
+    return NextResponse.json(
+      { error: "Failed to load posts" },
+      { status: 500 },
+    );
+  }
 }
 
 export async function POST(request) {
@@ -25,55 +58,11 @@ export async function POST(request) {
     return badRequest("Invalid JSON body");
   }
 
-  if (
-    typeof body?.title !== "string" ||
-    typeof body?.slug !== "string" ||
-    typeof body?.content !== "string"
-  ) {
-    return badRequest("Missing required fields");
-  }
-
-  const title = body.title.trim();
-  const slug = body.slug.trim().toLowerCase();
-  const content = body.content;
-
-  if (!title || !slug || !content.trim()) {
-    return badRequest("Missing required fields");
-  }
-  if (title.length > MAX_TITLE_LENGTH) {
-    return badRequest(`Title must be ${MAX_TITLE_LENGTH} characters or fewer`);
-  }
-  if (slug.length > MAX_SLUG_LENGTH || !SLUG_PATTERN.test(slug)) {
-    return badRequest(
-      "Slug may only contain lowercase letters, numbers and single hyphens",
-    );
-  }
-  if (content.length > MAX_CONTENT_LENGTH) {
-    return badRequest("Content is too long");
-  }
-
-  // Only accept a cover that came from our own Cloudinary upload folder.
-  let coverUrl = null;
-  let coverPublicId = null;
-  if (body.coverImage != null) {
-    const { url, publicId } = body.coverImage;
-    if (
-      typeof url !== "string" ||
-      typeof publicId !== "string" ||
-      !url.startsWith(CLOUDINARY_URL_PREFIX) ||
-      !publicId.startsWith(`${UPLOAD_FOLDER}/`)
-    ) {
-      return badRequest("Invalid cover image");
-    }
-    coverUrl = url;
-    coverPublicId = publicId;
-  }
+  const { data, error } = parsePostInput(body);
+  if (error) return badRequest(error);
 
   try {
-    const post = await prisma.post.create({
-      data: { title, slug, content, coverUrl, coverPublicId, published: false },
-    });
-
+    const post = await createPost(data);
     return NextResponse.json({ post }, { status: 201 });
   } catch (error) {
     if (error?.code === "P2002") {

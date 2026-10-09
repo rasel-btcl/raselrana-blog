@@ -13,6 +13,9 @@ const nextConfig = {
   basePath: "/blog",
   poweredByHeader: false,
   images: {
+    // Cloudinary does the resizing (f_auto,q_auto,c_limit,w_<width>)
+    loader: "custom",
+    loaderFile: "./src/lib/cloudinary-loader.js",
     remotePatterns: [
       {
         protocol: "https",
