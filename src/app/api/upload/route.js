@@ -1,23 +1,55 @@
-import cloudinary from "@/lib/cloudinary";
+import cloudinary, { UPLOAD_FOLDER } from "@/lib/cloudinary";
+import { requireAdmin } from "@/lib/require-admin";
 import { NextResponse } from "next/server";
 
+const MAX_FILE_SIZE = 4 * 1024 * 1024; // Vercel rejects request bodies above ~4.5 MB
+const ALLOWED_TYPES = {
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
+  "image/gif": "gif",
+  "image/avif": "avif",
+};
+
 export async function POST(request) {
+  const { response } = await requireAdmin();
+  if (response) return response;
+
+  let file;
   try {
     const formData = await request.formData();
-    const file = formData.get("file");
+    file = formData.get("file");
+  } catch {
+    return NextResponse.json({ error: "Invalid form data" }, { status: 400 });
+  }
 
-    if (!file) {
-      return NextResponse.json({ error: "No file provided" }, { status: 400 });
-    }
+  if (!(file instanceof File) || file.size === 0) {
+    return NextResponse.json({ error: "No file provided" }, { status: 400 });
+  }
 
-    const bytes = await file.arrayBuffer();
-    const buffer = Buffer.from(bytes);
+  if (!ALLOWED_TYPES[file.type]) {
+    return NextResponse.json(
+      { error: "Only JPEG, PNG, WebP, GIF and AVIF images are allowed" },
+      { status: 400 },
+    );
+  }
+
+  if (file.size > MAX_FILE_SIZE) {
+    return NextResponse.json(
+      { error: "Image must be 4 MB or smaller" },
+      { status: 413 },
+    );
+  }
+
+  try {
+    const buffer = Buffer.from(await file.arrayBuffer());
 
     const uploadResult = await new Promise((resolve, reject) => {
       const stream = cloudinary.uploader.upload_stream(
         {
-          folder: "raselrana-blog",
+          folder: UPLOAD_FOLDER,
           resource_type: "image",
+          allowed_formats: Object.values(ALLOWED_TYPES),
         },
         (error, result) => {
           if (error) reject(error);

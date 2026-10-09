@@ -1,16 +1,20 @@
-// auth.js (project root)
-
 import bcrypt from "bcryptjs";
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import { prisma } from "./prisma";
 
+// Auth.js uses these paths verbatim, so the Next.js basePath has to be included.
+const LOGIN_PATH = `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/login`;
+
+// Compared against when the email is unknown, so both failure cases take the same time.
+const DUMMY_HASH = bcrypt.hashSync("invalid-password-placeholder", 12);
+
 export const { handlers, signIn, signOut, auth } = NextAuth({
   basePath: "/api/auth",
   session: { strategy: "jwt" },
   pages: {
-    signIn: "/admin/login",
-    error: "/admin/login",
+    signIn: LOGIN_PATH,
+    error: LOGIN_PATH,
   },
   providers: [
     Credentials({
@@ -19,18 +23,22 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         password: { label: "Password", type: "password" },
       },
       async authorize(credentials) {
-        if (!credentials?.email || !credentials?.password) return null;
+        const email = credentials?.email;
+        const password = credentials?.password;
+        if (typeof email !== "string" || typeof password !== "string") {
+          return null;
+        }
+        if (!email || !password || password.length > 200) return null;
 
         const user = await prisma.user.findUnique({
-          where: { email: credentials.email },
+          where: { email: email.trim().toLowerCase() },
         });
-        if (!user) return null;
 
         const valid = await bcrypt.compare(
-          credentials.password,
-          user.passwordHash,
+          password,
+          user?.passwordHash ?? DUMMY_HASH,
         );
-        if (!valid) return null;
+        if (!user || !valid) return null;
 
         return {
           id: user.id,

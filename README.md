@@ -18,23 +18,26 @@ This is a standalone Next.js (App Router) application, integrated into the main 
 | ------------------- | ------------------------------------------- |
 | Framework           | Next.js (App Router)                        |
 | Styling             | Tailwind CSS v4                             |
-| Database            | MongoDB (Atlas) + Mongoose                  |
+| Database            | MongoDB (Atlas) + Prisma 6                  |
 | Image storage       | Cloudinary                                  |
-| Auth                | Auth.js (GitHub OAuth, restricted to owner) |
-| Content             | MDX (compiled from DB-stored Markdown/MDX)  |
-| Syntax highlighting | rehype-pretty-code (Shiki)                  |
+| Auth                | Auth.js v5 (email + password, admin only)   |
+| Content (planned)   | MDX (compiled from DB-stored Markdown/MDX)  |
 | Hosting             | Vercel (Hobby)                              |
 
 ## Features
 
-- MongoDB-backed posts with a protected `/admin` CMS (create, edit, publish, delete)
-- Cloudinary-powered image uploads with automatic optimization
+Built:
+
+- Protected `/admin` area: dashboard and post creation (saved as drafts)
+- Cloudinary cover image uploads (folder `raselrana-blog`, images up to 4 MB)
+- Admin-only API routes with input validation
+
+Planned:
+
+- Public post pages rendered from the database, edit / publish / delete in the CMS
 - MDX rendering with syntax-highlighted code blocks
-- Tags, pagination, and client-side search (Fuse.js)
-- Table of contents with scroll-spy
-- Reading time estimates
-- SEO: dynamic metadata, sitemap, robots.txt, RSS feed, Open Graph images, JSON-LD structured data
-- Instant publish via `revalidatePath` — no redeploy needed for new/edited posts
+- Tags, pagination, search, table of contents, reading time
+- SEO: sitemap, robots.txt, RSS feed, Open Graph images, JSON-LD
 
 ## Getting Started
 
@@ -50,47 +53,39 @@ npm install
 
 ### 2. Environment variables
 
-Create `.env.local` in the project root:
+Copy `.env.example` to `.env.local` and fill it in. The Prisma CLI does not read `.env.local`, so also put `DATABASE_URL` in `.env`.
 
-```env
-# MongoDB
-MONGODB_URI=
+Add the same variables (except the `ADMIN_*` ones) in the blog's Vercel project for Production and Preview.
 
-# Cloudinary
-CLOUDINARY_CLOUD_NAME=
-CLOUDINARY_API_KEY=
-CLOUDINARY_API_SECRET=
+### 3. Database and admin user
 
-# Auth.js
-AUTH_SECRET=
-AUTH_GITHUB_ID=
-AUTH_GITHUB_SECRET=
-
-# Site
-NEXT_PUBLIC_SITE_URL=https://raselrana.com.bd/blog
+```bash
+npx prisma db push                  # create collections and indexes
+node src/scripts/create-admin.js    # create/update the admin from ADMIN_EMAIL / ADMIN_PASSWORD
 ```
 
-Add the same variables in the Vercel project dashboard for Production and Preview environments.
+Re-run the script any time to change the admin password.
 
-### 3. Run locally
+### 4. Run locally
 
 ```bash
 npm run dev
 ```
 
-The dev server runs at `http://localhost:3000` (note: `basePath` applies here too, so local routes are under `/blog`).
+The dev server runs at `http://localhost:3000/blog` (`basePath` applies locally too). Sign in at `/blog/login`.
 
 ## Project Structure
 
 ```
+prisma/schema.prisma  # Post and User models
 src/
-├── app/            # Routes: public pages, /admin CMS, API routes, sitemap/rss/robots
-├── components/      # UI components: layout, blog, mdx, admin
-├── lib/             # Infra clients: db.js, auth.js, cloudinary.js, mdx.js
-├── services/        # Domain logic per entity (posts/, uploads/) — models, queries, actions
-├── utils/           # Pure helper functions (formatDate, slugify, etc.)
-├── assets/          # Fonts, icons, images imported directly into code
-└── middleware.js     # Protects /admin routes via Auth.js session
+├── app/            # Routes: public pages, /login, /admin CMS, API routes
+├── components/     # UI components: auth, blog, media
+├── lib/            # Infra: prisma.js, auth.js, require-admin.js, cloudinary.js
+├── providers/      # Client providers (Auth.js session)
+├── scripts/        # create-admin.js
+├── services/       # Domain logic per entity (placeholders, not built yet)
+└── proxy.js        # Protects /admin routes via the Auth.js session (Next.js 16 proxy)
 ```
 
 ## Scripts
@@ -100,3 +95,4 @@ src/
 | `npm run dev`   | Start local dev server  |
 | `npm run build` | Production build        |
 | `npm run start` | Start production server |
+| `npm run lint`  | Run ESLint              |

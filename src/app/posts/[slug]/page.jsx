@@ -8,8 +8,9 @@ topics, and professional reflections.`,
   },
 };
 
-export default function PostPage({ params }) {
-  const post = posts[params.slug];
+export default async function PostPage({ params }) {
+  const { slug } = await params;
+  const post = Object.hasOwn(posts, slug) ? posts[slug] : null;
 
   if (!post) {
     return <p>Post not found.</p>;

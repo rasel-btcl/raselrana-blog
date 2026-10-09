@@ -1,4 +1,3 @@
-// src/app/admin/(protected)/dashboard/page.jsx
 import SignOutButton from "@/components/auth/sign-out-button";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -7,8 +6,9 @@ import Link from "next/link";
 export default async function DashboardPage() {
   const session = await auth();
 
-  const [totalPosts, recentPosts] = await Promise.all([
+  const [totalPosts, publishedPosts, recentPosts] = await Promise.all([
     prisma.post.count(),
+    prisma.post.count({ where: { published: true } }),
     prisma.post.findMany({
       orderBy: { createdAt: "desc" },
       take: 5,
@@ -41,11 +41,11 @@ export default async function DashboardPage() {
           <div className="rounded-lg border border-gray-200 bg-white p-5">
             <p className="text-sm text-gray-500">Published</p>
             <p className="mt-1 text-2xl font-semibold text-gray-900">
-              {recentPosts.filter((p) => p.published).length}
+              {publishedPosts}
             </p>
           </div>
           <Link
-            href="/admin/posts/new"
+            href="/admin/new-post"
             className="flex items-center justify-center rounded-lg border border-dashed border-gray-300 bg-white p-5 text-sm font-medium text-gray-600 hover:border-gray-400 hover:text-gray-900"
           >
             + New post

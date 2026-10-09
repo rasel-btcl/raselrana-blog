@@ -1,4 +1,3 @@
-// app/admin/layout.js
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 

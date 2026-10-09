@@ -24,13 +24,13 @@ export default function ImageUploader({ onUploaded }) {
         body: formData,
       });
 
-      if (!res.ok) throw new Error("Upload failed");
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Upload failed");
 
-      const data = await res.json();
       onUploaded?.(data); // { url, publicId, width, height }
     } catch (err) {
       console.error(err);
-      setError("Image upload failed. Please try again.");
+      setError(err.message || "Image upload failed. Please try again.");
     } finally {
       setUploading(false);
     }
