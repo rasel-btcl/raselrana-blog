@@ -10,6 +10,7 @@ export default function PostEditor() {
   const [coverImage, setCoverImage] = useState(null); // { url, publicId }
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
+  const [success, setSuccess] = useState(false);
 
   const basePath = process.env.NEXT_PUBLIC_BASE_PATH || "";
 
@@ -19,6 +20,7 @@ export default function PostEditor() {
     if (submitting) return; // prevent double-submit
     setSubmitting(true);
     setError(null);
+    setSuccess(false);
 
     try {
       const res = await fetch(`${basePath}/api/posts`, {
@@ -41,13 +43,12 @@ export default function PostEditor() {
         return;
       }
 
-      const data = await res.json();
-
       // reset form after success
       setTitle("");
       setSlug("");
       setContent("");
       setCoverImage(null);
+      setSuccess(true);
     } catch (err) {
       console.error("Submit error:", err);
       setError("Something went wrong. Please try again.");
@@ -91,6 +92,9 @@ export default function PostEditor() {
       )}
 
       {error && <p className="text-sm text-red-600">{error}</p>}
+      {success && (
+        <p className="text-sm text-green-700">Post saved as a draft.</p>
+      )}
 
       <button
         type="submit"
