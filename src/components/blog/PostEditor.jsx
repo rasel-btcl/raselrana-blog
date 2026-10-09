@@ -593,7 +593,7 @@ export default function PostEditor({
             className={`${input} font-mono`}
           />
           <p className="mt-1.5 break-all font-mono text-xs text-[var(--slate)]">
-            /blog/posts/{slug || "…"}
+            /blog/{slug || "…"}
           </p>
           {slugWillRedirect && (
             <p className="mt-1.5 text-xs text-[var(--danger)]">

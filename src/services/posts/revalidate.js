@@ -1,4 +1,5 @@
 import { contentTypeByValue } from "@/lib/content-types";
+import { categoryPath, postPath, tagPath, typePath } from "@/lib/posts";
 import { revalidatePath } from "next/cache";
 
 /**
@@ -12,19 +13,13 @@ export function revalidatePosts(...posts) {
   for (const post of posts) {
     if (!post) continue;
 
-    // Current article address, and the flat one it moves to in step 15.
-    paths.add(`/posts/${post.slug}`);
-    paths.add(`/${post.slug}`);
-
-    if (post.category?.slug) paths.add(`/category/${post.category.slug}`);
+    paths.add(postPath(post.slug));
+    if (post.category?.slug) paths.add(categoryPath(post.category.slug));
 
     const type = contentTypeByValue(post.contentType);
-    if (type) paths.add(`/type/${type.slug}`);
+    if (type) paths.add(typePath(type.slug));
 
-    for (const tag of post.tags ?? []) {
-      paths.add(`/tags/${tag.slug}`);
-      paths.add(`/tag/${tag.slug}`);
-    }
+    for (const tag of post.tags ?? []) paths.add(tagPath(tag.slug));
   }
 
   for (const path of paths) revalidatePath(path);

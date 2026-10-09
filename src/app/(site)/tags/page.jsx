@@ -3,6 +3,9 @@ import { container, pageHeading, pageLabel } from "@/lib/ui";
 import { getTagCounts } from "@/services/posts/queries";
 import Link from "next/link";
 
+// Rebuilt at most every 5 minutes, so a scheduled post shows up by itself.
+export const revalidate = 300;
+
 export const metadata = {
   title: "Topics",
   description: "Every topic on Rasel Rana's blog, with the posts in each.",

@@ -65,7 +65,7 @@ export default async function PreviewPage({ params }) {
 
       <section className="border-t border-[var(--line)]">
         <div className={`${container} py-16 md:py-20`}>
-          <AuthorCard />
+          <AuthorCard author={post.author} />
         </div>
       </section>
     </>

@@ -32,7 +32,7 @@ Newest first, by first-publish time. Drafts and archived posts never appear.
     {
       "title": "Why backup power decides telecom uptime",
       "slug": "why-backup-power-decides-telecom-uptime",
-      "url": "/blog/posts/why-backup-power-decides-telecom-uptime",
+      "url": "/blog/why-backup-power-decides-telecom-uptime",
       "excerpt": "One or two sentences that summarise the post.",
       "coverUrl": "https://res.cloudinary.com/<cloud>/image/upload/v1/raselrana-blog/abc.jpg",
       "coverAlt": "Battery bank in a telecom shelter",
@@ -50,7 +50,7 @@ Newest first, by first-publish time. Drafts and archived posts never appear.
 | --- | --- | --- |
 | `title` | text | Always present. |
 | `slug` | text | Lower-case letters, numbers and single hyphens. |
-| `url` | text | **Use this for the link.** Root-relative address of the post on raselrana.com.bd. Article addresses will move from `/blog/posts/<slug>` to `/blog/<slug>`; `url` always holds the current one, and the old address keeps redirecting. |
+| `url` | text | **Use this for the link.** Root-relative address of the post on raselrana.com.bd, currently `/blog/<slug>`. The older `/blog/posts/<slug>` form still works: it redirects here. |
 | `excerpt` | text | The author's summary, or about 160 characters from the first paragraph. May be empty. |
 | `coverUrl` | text or `null` | The post's featured image: a `https://res.cloudinary.com/…/image/upload/…` address. To get a smaller copy, insert `f_auto,q_auto,c_limit,w_<width>/` right after `/image/upload/`. |
 | `coverAlt` | text | Description of the image for the `alt` attribute. May be empty. |

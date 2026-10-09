@@ -6,14 +6,27 @@ export const BLOG_URL = `${SITE_URL}/blog`;
 export const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 // Addresses inside the blog, written without the /blog base path (next/link adds it).
-// Articles move to `/<slug>` and topics to `/tag/<slug>` in spec step 15; changing
-// these two functions is then enough.
+// Articles are flat: /blog/<slug>, never with the category in the address.
+// (The older /posts/<slug> and /tags/<slug> redirect here; see next.config.mjs.)
 export function postPath(slug) {
-  return `/posts/${slug}`;
+  return `/${slug}`;
 }
 
 export function tagPath(slug) {
-  return `/tags/${slug}`;
+  return `/tag/${slug}`;
+}
+
+export function categoryPath(slug) {
+  return `/category/${slug}`;
+}
+
+/** `typeSlug` is the address slug from src/lib/content-types.js, e.g. "how-to". */
+export function typePath(typeSlug) {
+  return `/type/${typeSlug}`;
+}
+
+export function authorPath(username) {
+  return `/author/${username}`;
 }
 
 /** Root-relative address on raselrana.com.bd, e.g. for the main site to link to. */

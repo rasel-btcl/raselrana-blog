@@ -4,11 +4,18 @@ import TableOfContents from "@/components/blog/TableOfContents";
 import TagChip from "@/components/blog/TagChip";
 import Markdown from "@/components/mdx/Markdown";
 import { contentTypeByValue } from "@/lib/content-types";
-import { formatDate, postDate, postUrl } from "@/lib/posts";
+import {
+  categoryPath,
+  formatDate,
+  postDate,
+  postUrl,
+  typePath,
+} from "@/lib/posts";
 import { getTableOfContents } from "@/lib/toc";
 import { container, metaLine } from "@/lib/ui";
 import { coverOf } from "@/services/posts/queries";
 import Image from "next/image";
+import Link from "next/link";
 
 const MIN_TOC_HEADINGS = 3;
 const ARTICLE_ID = "post-article";
@@ -34,9 +41,23 @@ export default function PostArticle({ post }) {
         <header className={`${container} pb-10 pt-16 md:pt-20`}>
           <p className="rise flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-xs uppercase tracking-[0.2em] text-[var(--slate)]">
             <span aria-hidden className="h-px w-10 bg-[var(--signal)]" />
-            {post.category && <span>{post.category.name}</span>}
+            {post.category && (
+              <Link
+                href={categoryPath(post.category.slug)}
+                className="transition-colors hover:text-[var(--ink)]"
+              >
+                {post.category.name}
+              </Link>
+            )}
             {post.category && type && <span aria-hidden>·</span>}
-            {type && <span className="text-[var(--signal)]">{type.label}</span>}
+            {type && (
+              <Link
+                href={typePath(type.slug)}
+                className="text-[var(--signal)] underline-offset-4 hover:underline"
+              >
+                {type.label}
+              </Link>
+            )}
           </p>
           <h1
             className="rise mt-6 max-w-4xl font-display text-4xl font-semibold leading-[1.08] tracking-tight text-[var(--ink)] md:text-6xl"
