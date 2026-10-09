@@ -1,3 +1,4 @@
+import AuthProvider from "@/providers/auth-provider";
 import { Analytics } from "@vercel/analytics/next";
 import "./globals.css";
 
@@ -23,11 +24,13 @@ export default function RootLayout({ children }) {
   return (
     <html lang="en">
       <body>
-        {children}
-        <Analytics
-        /* this is for Vercel Analytics, you can remove it if you don&apos;t
+        <AuthProvider>
+          {children}
+          <Analytics
+          /* this is for Vercel Analytics, you can remove it if you don&apos;t
         want analytics */
-        />
+          />
+        </AuthProvider>
       </body>
     </html>
   );
