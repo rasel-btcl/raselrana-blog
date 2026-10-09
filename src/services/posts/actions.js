@@ -54,9 +54,32 @@ function storedFields(data) {
     contentType: data.contentType,
     status: data.status,
     featuredImage: data.featuredImage,
+    relatedPostIds: data.relatedPostIds,
+    seoTitle: data.seoTitle,
+    seoDescription: data.seoDescription,
+    ogImageUrl: data.ogImageUrl,
+    canonicalUrl: data.canonicalUrl,
+    noindex: data.noindex,
     showOnMainSite: data.showOnMainSite,
     readingTime: readingMinutes(data.content),
   };
+}
+
+/**
+ * The publish date to store (docs/BLOG_ADMIN_SPEC.md §6.3).
+ * - Scheduled: the chosen future date.
+ * - Published: the first publish date is kept; a post that was never public
+ *   (no date, or a scheduled date still ahead) is stamped now.
+ * - Draft / archived: the date is kept if the post has been public, so it is still
+ *   known to have been published; a date still in the future is dropped.
+ */
+function nextPublishedAt(existing, data, now = new Date()) {
+  const previous = existing?.publishedAt ?? null;
+  const wasPublic = previous && previous <= now;
+
+  if (data.status === "SCHEDULED") return data.publishedAt;
+  if (data.status === "PUBLISHED") return wasPublic ? previous : now;
+  return wasPublic ? previous : null;
 }
 
 /** `data` comes from parsePostInput(); `author` is the signed-in user. */
@@ -70,7 +93,7 @@ export async function createPost(data, author) {
   const post = await prisma.post.create({
     data: {
       ...storedFields(data),
-      publishedAt: data.status === "PUBLISHED" ? new Date() : null,
+      publishedAt: nextPublishedAt(null, data),
       author: { connect: { id: author.id } },
       ...(data.categoryId
         ? { category: { connect: { id: data.categoryId } } }
@@ -96,11 +119,16 @@ export async function updatePost(existing, data) {
     where: { id: existing.id },
     data: {
       ...storedFields(data),
+      // A post cannot be related to itself.
+      relatedPostIds: data.relatedPostIds.filter((id) => id !== existing.id),
       previousSlugs: nextPreviousSlugs(existing, data.slug),
-      // publishedAt records the first publish only; unpublishing keeps it.
-      publishedAt:
-        existing.publishedAt ??
-        (data.status === "PUBLISHED" ? new Date() : null),
+      publishedAt: nextPublishedAt(existing, data),
+      // "Last updated" moves only on a deliberate significant update of a live post.
+      ...(data.significantUpdate &&
+      data.status === "PUBLISHED" &&
+      existing.status === "PUBLISHED"
+        ? { contentUpdatedAt: new Date() }
+        : {}),
       category: data.categoryId
         ? { connect: { id: data.categoryId } }
         : { disconnect: true },

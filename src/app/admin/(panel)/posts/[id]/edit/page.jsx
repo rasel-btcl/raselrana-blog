@@ -5,6 +5,7 @@ import {
   getAllTagNames,
   getCategories,
   getPostById,
+  getPostOptions,
 } from "@/services/posts/queries";
 import { isValidObjectId } from "@/services/posts/validation";
 import Link from "next/link";
@@ -16,13 +17,16 @@ export default async function EditPostPage({ params }) {
   const { id } = await params;
   if (!isValidObjectId(id)) notFound();
 
-  const [user, post, categories, tagSuggestions] = await Promise.all([
-    getCurrentUser(),
-    getPostById(id),
-    getCategories(),
-    getAllTagNames(),
-  ]);
+  const [user, post, categories, tagSuggestions, postOptions] =
+    await Promise.all([
+      getCurrentUser(),
+      getPostById(id),
+      getCategories(),
+      getAllTagNames(),
+      getPostOptions(),
+    ]);
   if (!post || !canEditPost(user, post)) notFound();
+  const now = new Date();
 
   return (
     <>
@@ -54,10 +58,19 @@ export default async function EditPostPage({ params }) {
           content: post.content,
           showOnMainSite: post.showOnMainSite,
           status: post.status,
-          everPublished: Boolean(post.publishedAt),
+          publishedAt: post.publishedAt?.toISOString() ?? null,
+          // Has it ever been public? Then a changed slug leaves a redirect behind.
+          everPublic: Boolean(post.publishedAt && post.publishedAt <= now),
+          relatedPostIds: post.relatedPostIds,
+          seoTitle: post.seoTitle,
+          seoDescription: post.seoDescription,
+          ogImageUrl: post.ogImageUrl,
+          canonicalUrl: post.canonicalUrl,
+          noindex: post.noindex,
         }}
         categories={categories}
         tagSuggestions={tagSuggestions}
+        postOptions={postOptions}
       />
     </>
   );

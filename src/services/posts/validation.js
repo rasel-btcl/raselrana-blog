@@ -11,6 +11,9 @@ export const MAX_CONTENT_LENGTH = 200_000;
 export const MAX_TAGS = 8;
 export const MAX_TAG_LENGTH = 40;
 export const MAX_ALT_LENGTH = 200;
+export const MAX_SEO_TITLE_LENGTH = 60;
+export const MAX_SEO_DESCRIPTION_LENGTH = 160;
+export const MAX_RELATED_POSTS = 4;
 
 const CLOUDINARY_URL_PREFIX = `https://res.cloudinary.com/${process.env.CLOUDINARY_CLOUD_NAME}/`;
 const OBJECT_ID_PATTERN = /^[a-f0-9]{24}$/i;
@@ -76,6 +79,27 @@ const tagsSchema = z
     return tags;
   });
 
+/** Optional one-line text: trimmed, `null` when empty, at most `max` characters. */
+const optionalText = (max, label) =>
+  z
+    .string(`${label} must be text`)
+    .nullish()
+    .transform((text) => oneLine(text ?? ""))
+    .pipe(z.string().max(max, `${label} must be ${max} characters or fewer`))
+    .transform((text) => text || null);
+
+/** Optional https address, `null` when empty. */
+const optionalUrl = (label) =>
+  z
+    .string(`${label} must be text`)
+    .nullish()
+    .transform((text) => (text ?? "").trim())
+    .refine(
+      (text) => !text || (/^https:\/\/\S+$/.test(text) && URL.canParse(text)),
+      `${label} must be a full https:// address`,
+    )
+    .transform((text) => text || null);
+
 const postSchema = z.object({
   title: z
     .string("Title is required")
@@ -126,13 +150,44 @@ const postSchema = z.object({
     .transform((id) => id ?? null),
   tags: tagsSchema,
   featuredImage: featuredImageSchema.nullish().transform((image) => image ?? null),
-  // Scheduling and archiving get their controls in spec step 11.
-  status: z.enum(["DRAFT", "PUBLISHED"], "Unknown status").default("DRAFT"),
+  status: z
+    .enum(["DRAFT", "SCHEDULED", "PUBLISHED", "ARCHIVED"], "Unknown status")
+    .default("DRAFT"),
+  // When a scheduled post goes live (an ISO date-time). Ignored for other statuses.
+  publishedAt: z
+    .string("Invalid publish date")
+    .nullish()
+    .transform((value, ctx) => {
+      if (!value) return null;
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) {
+        ctx.addIssue({ code: "custom", message: "Invalid publish date" });
+        return z.NEVER;
+      }
+      return date;
+    }),
+  // Ticked on "Update" for a change readers should know about; sets "Last updated".
+  significantUpdate: z.boolean("Invalid value").default(false),
+  relatedPostIds: z
+    .array(z.string().regex(OBJECT_ID_PATTERN, "Unknown related post"))
+    .max(MAX_RELATED_POSTS, `Pick at most ${MAX_RELATED_POSTS} related posts`)
+    .default([])
+    .transform((ids) => [...new Set(ids)]),
+  seoTitle: optionalText(MAX_SEO_TITLE_LENGTH, "SEO title"),
+  seoDescription: optionalText(MAX_SEO_DESCRIPTION_LENGTH, "SEO description"),
+  ogImageUrl: optionalUrl("Social image address"),
+  canonicalUrl: optionalUrl("Canonical address"),
+  noindex: z.boolean("Invalid value").default(false),
   showOnMainSite: z.boolean("Invalid value").default(true),
 });
 
 /** What a post needs before it may go public (docs/BLOG_ADMIN_SPEC.md §6.4). */
 function publishProblem(post) {
+  if (post.status === "SCHEDULED") {
+    if (!post.publishedAt || post.publishedAt <= new Date()) {
+      return "Choose a publish date in the future to schedule this post";
+    }
+  }
   if (!post.content.trim()) return "Content is required to publish";
   if (!post.excerpt) return "An excerpt is required to publish";
   if (!post.categoryId) return "Choose a category before publishing";
@@ -158,7 +213,8 @@ export function parsePostInput(body) {
   // Left empty, the excerpt comes from the start of the content.
   if (!data.excerpt) data.excerpt = excerptFor({ content: data.content });
 
-  if (data.status !== "DRAFT") {
+  // Drafts and archived posts may be incomplete.
+  if (data.status === "PUBLISHED" || data.status === "SCHEDULED") {
     const problem = publishProblem(data);
     if (problem) return { error: problem };
   }

@@ -238,6 +238,13 @@ export default async function PostsListPage({ searchParams }) {
                         >
                           Edit
                         </Link>
+                        <Link
+                          href={`/preview/${post.id}`}
+                          target="_blank"
+                          className={rowButton}
+                        >
+                          Preview
+                        </Link>
                         {post.status === "PUBLISHED" && (
                           <Link href={postPath(post.slug)} className={rowButton}>
                             View live

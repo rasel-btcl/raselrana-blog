@@ -42,7 +42,9 @@ export async function isSlugTaken(slug, exceptPostId) {
  */
 export function nextPreviousSlugs(existing, newSlug) {
   const previous = existing.previousSlugs.filter((slug) => slug !== newSlug);
-  const wasPublic = Boolean(existing.publishedAt);
+  const wasPublic = Boolean(
+    existing.publishedAt && existing.publishedAt <= new Date(),
+  );
 
   if (wasPublic && existing.slug !== newSlug && !previous.includes(existing.slug)) {
     previous.push(existing.slug);

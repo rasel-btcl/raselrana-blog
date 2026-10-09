@@ -358,3 +358,12 @@ export async function getPostsForAdminList({
     totalPages: Math.max(1, Math.ceil(total / ADMIN_POSTS_PER_PAGE)),
   };
 }
+
+/** `[{ id, title }]` of every post that is not archived, for the related-posts picker. */
+export async function getPostOptions() {
+  return prisma.post.findMany({
+    where: { status: { not: "ARCHIVED" } },
+    orderBy: { updatedAt: "desc" },
+    select: { id: true, title: true },
+  });
+}

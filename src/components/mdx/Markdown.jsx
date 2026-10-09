@@ -1,4 +1,5 @@
 import { cloudinarySrcSet, cloudinaryUrl } from "@/lib/cloudinary-loader";
+import rehypeCallouts from "@/lib/rehype-callouts";
 import { parseYouTubeUrl } from "@/lib/youtube";
 import ReactMarkdown from "react-markdown";
 import rehypeHighlight from "rehype-highlight";
@@ -161,16 +162,17 @@ const components = {
 };
 
 const remarkPlugins = [remarkGfm];
-const rehypePlugins = [rehypeSlug, rehypeHighlight];
+const rehypePlugins = [rehypeSlug, rehypeHighlight, rehypeCallouts];
 
 /**
  * The one Markdown renderer: used by the public post page (on the server) and by
  * the admin live preview (in the browser), so both always look the same.
  * Raw HTML in posts is not rendered. Wrap the output in an element with class "article".
  *
- * Two things go beyond plain Markdown:
+ * A few things go beyond plain Markdown:
  * - two or more images with no text between them render as a photo grid;
  * - a YouTube address on a line of its own renders as a click-to-play video;
+ * - a quote starting with `[!NOTE]`, `[!TIP]` or `[!WARNING]` renders as a callout box;
  * - an image with a title, `![alt](url "caption")`, renders with that caption under it.
  */
 export default function Markdown({ children }) {

@@ -637,11 +637,11 @@ Statuses below are from the audit of 2026-10-09 and are updated as steps are bui
 | 4 | Authz + rate limiting | ✅ | `src/lib/authz.js`, `src/lib/login-rate-limit.js`; every write handler goes through `src/lib/require-admin.js`. Tested: 6th attempt blocked, inactive user locked out. |
 | 5 | Query helpers | ✅ | `livePostWhere` / `listedPostWhere` in `queries.js`, `slugs.js`, `revalidate.js`, zod validation, stored `readingTime`. The old-slug redirect itself is step 16. |
 | 6 | Admin layout + Overview | ✅ | Sidebar (collapsible on phones), Overview with counts, recently edited, upcoming scheduled and needs review. Login moved to `/admin/login`; old admin addresses redirect. Categories / Tags / Profile links are added to the sidebar with steps 12–14. |
-| 7 | Posts list | 🟡 | `/admin/posts`: table, filters, title search, 20 per page, Edit, View live, Duplicate, Archive / Unarchive, Delete (never-published drafts only). The Preview row action comes with the preview route (step 10). |
+| 7 | Posts list | ✅ | `/admin/posts`: table, filters, title search, 20 per page, Edit, Preview, View live, Duplicate, Archive / Unarchive, Delete (never-published drafts only). |
 | 8 | Cloudinary upload | ✅ | Signed direct uploads: `signImageUpload` server action (`src/services/uploads/actions.js`) + `src/lib/upload-client.js`. Folder `<UPLOAD_FOLDER>/posts/<post-id>/` (`unassigned` before the first save), 5 MB, SVG rejected. Inline images ask for alt text and an optional caption. `/api/upload` is removed. |
-| 9 | Post editor (save) | 🟡 | Has title, slug (with the published-slug warning), excerpt, category, content type, topics, featured image with alt text, "Show on main site", Markdown with live preview, insert image / gallery / video. Still a plain textarea; no SEO fields, related posts, toolbar or shortcuts. |
-| 10 | Preview + autosave | 🟡 | Instant in-browser preview. No `/preview/[id]`, no autosave. |
-| 11 | Publish flow + checklist | 🟡 | Save draft / publish / unpublish only. |
+| 9 | Post editor (save) | ✅ | CodeMirror editor with toolbar (H2, H3, bold, italic, link, code, table, callout, image, gallery, video) and Ctrl+S / B / I. All settings fields incl. SEO, related posts (a pick list, not a search box), publish date in Dhaka time, noindex, "Show on main site". zod validation on the server. |
+| 10 | Preview + autosave | ✅ | `/preview/[id]` (editors only, noindex, never cached) shares `PostArticle` with the public page. Drafts autosave 3 s after the last change; the first autosave creates the draft. The in-editor preview stays instant (same renderer) instead of an iframe, by decision. Leaving with unsaved changes warns. |
+| 11 | Publish flow + checklist | ✅ | Publish / Schedule / Update / Unpublish / Archive, significant update, pre-publish checklist with blocking errors (incl. slug taken) and warnings, targeted revalidation. |
 | 12 | Categories admin | ❌ | |
 | 13 | Tags admin | ❌ | |
 | 14 | Profile | ❌ | |

@@ -18,6 +18,7 @@ export default function ImageUploader({
   multiple = false,
   disabled = false,
   postId = null,
+  className = buttonSmall,
 }) {
   const inputRef = useRef(null);
   const [progress, setProgress] = useState(null); // e.g. "2/5" while uploading
@@ -69,7 +70,7 @@ export default function ImageUploader({
         type="button"
         onClick={() => inputRef.current?.click()}
         disabled={disabled || uploading}
-        className={buttonSmall}
+        className={className}
       >
         {uploading ? `Uploading… ${progress}`.trim() : label}
       </button>

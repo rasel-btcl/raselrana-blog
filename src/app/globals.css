@@ -252,6 +252,34 @@ dialog::backdrop {
 
 .article del { color: var(--slate); }
 
+/* Callouts: > [!NOTE] / [!TIP] / [!WARNING] (src/lib/rehype-callouts.js) */
+.article .callout {
+  --callout: var(--signal);
+  margin: 1.5em 0;
+  padding: 0.9em 1.1em;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--callout);
+  border-radius: 0.5rem;
+  background: var(--surface);
+  font-size: 0.95em;
+}
+
+.article .callout-tip { --callout: var(--pulse); }
+.article .callout-warning { --callout: var(--danger); }
+
+.article .callout > * { margin: 0.5em 0; }
+.article .callout > :first-child { margin-top: 0; }
+.article .callout > :last-child { margin-bottom: 0; }
+
+.article .callout-title {
+  font-family: var(--font-mono);
+  font-size: 0.75em;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  color: var(--callout);
+}
+
 .article figure { margin: 1.5em 0; }
 .article figure img { margin: 0; }
 

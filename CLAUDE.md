@@ -83,23 +83,34 @@ All post access goes through `src/services/posts/`:
 
 - `queries.js` — reads. **`livePostWhere()`** (published, or scheduled with its time passed) decides what a reader may open; **`listedPostWhere(...extra)`** adds "not `noindex`" and is what every listing, search, related-posts query and the main-site API use. Never write a status filter by hand in a public query. Public functions return card objects without content or ids.
 - `actions.js` — create / update / delete. They compute `readingTime`, keep `previousSlugs`, find-or-create topics, and call `revalidatePosts()`.
-- `validation.js` — `parsePostInput()` (zod). Drafts may be incomplete; publishing requires content, excerpt, category, and a featured image with alt text.
+- `validation.js` — `parsePostInput()` (zod). Drafts and archived posts may be incomplete; publishing or scheduling requires content, excerpt, category, and a featured image with alt text, and scheduling a future date.
 - `slugs.js` — a slug is taken if any post uses it now **or used it before** (`previousSlugs`), and `RESERVED_SLUGS` blocks names of top-level routes, because articles will live at `/blog/<slug>`.
 - `revalidate.js` — `revalidatePosts(before, after)` refreshes the pages a post is on. Any new write path must call it, or statically rendered pages such as `/tags` go stale.
 
-`publishedAt` records the first publish only (unpublishing keeps it). `updatedAt` changes on every save and is never shown to readers; `contentUpdatedAt` ("Last updated") is set only by a deliberate significant update. `showOnMainSite` only affects the main-site API.
+`publishedAt` is the first publish time, or for a `SCHEDULED` post the time it goes live (`nextPublishedAt()` in `actions.js` holds the rules: unpublishing keeps it, a future date is dropped when a post goes back to draft, publishing a never-public post stamps now). Scheduling needs no cron: `livePostWhere()` compares with the clock. `updatedAt` changes on every save and is never shown to readers; `contentUpdatedAt` ("Last updated") is set only by a deliberate significant update. `showOnMainSite` only affects the main-site API.
 
 Old documents may still carry the pre-spec fields (`published`, `coverUrl`, `coverPublicId`, a `tags` text list). Prisma ignores them; do not rely on them.
 
 Addresses are built by `postPath()` / `tagPath()` in `src/lib/posts.js`. They currently return `/posts/<slug>` and `/tags/<slug>`; spec step 15 moves them to `/<slug>` and `/tag/<slug>` with redirects from the old ones.
 
+### Editor
+
+`components/blog/PostEditor.jsx` (client) holds all fields in state and talks to the REST handlers. Things that are easy to break:
+
+- **Autosave** runs only while the post is a draft, 3 seconds after the last change, and never changes the status. The first save of a new post creates it and swaps the address with `history.replaceState`, on purpose without a navigation, so typing is not interrupted. Autosaves do not overwrite field state with the server's answer; manual saves do.
+- Going public (Publish / Schedule / Update) always goes through `goPublic()`, which runs `components/admin/editor/checklist.js` plus the server slug check and shows the checklist dialog; other buttons call `save()` directly.
+- The publish date is typed and shown in Asia/Dhaka time and stored in UTC.
+- `components/admin/editor/MarkdownEditor.jsx` wraps CodeMirror 6. Its colours come from the CSS tokens, so it follows the theme by itself. The CodeMirror extensions are created once at module level; Ctrl+S reaches React through a DOM event, because the lint rules forbid reading refs while building them.
+- The in-editor preview renders `Markdown.jsx` directly. `/preview/[id]` renders the saved post with `components/blog/PostArticle.jsx`, the same component the public post page uses.
+
 ### Markdown
 
 `src/components/mdx/Markdown.jsx` is the single renderer (GFM, heading ids, syntax highlighting, raw HTML dropped, external links in a new tab, Cloudinary-resized images). It has no `"use client"` so the post page renders it on the server and `PostEditor` reuses it for the live preview; keep it free of server-only imports. Its output must sit inside an element with class `article` (styles in `globals.css`).
 
-Three conventions go beyond plain Markdown, both decided by looking at a paragraph's contents:
+Four conventions go beyond plain Markdown, both decided by looking at a paragraph's contents:
 
 - two or more images with nothing else in the paragraph (image lines directly under each other) render as a photo grid (`.gallery`), each linking to the full-size image;
+- a blockquote starting with `[!NOTE]`, `[!TIP]` or `[!WARNING]` renders as a callout box (`src/lib/rehype-callouts.js`);
 - one image with a title, `![alt](url "caption")`, renders as a `<figure>` with that caption;
 - a bare YouTube address alone in a paragraph renders as `YouTubeEmbed` (thumbnail and play button; the player loads from `youtube-nocookie.com` only on click, and without JavaScript it is a plain link). A YouTube link inside a sentence stays a link. Parsing is in `src/lib/youtube.js`.
 
@@ -124,12 +135,13 @@ Login rate limiting (`src/lib/login-rate-limit.js`): every attempt is stored as 
 ### API
 
 - `GET /api/posts?limit=` — **public, and a contract with the main site** (its home page shows the newest posts). Only listed posts with `showOnMainSite` on. The shape, caching header and rules are in `docs/main-site-api.md`; fields may be added but not removed or renamed, and never content or ids.
+- `GET /api/posts/slug-check?slug=&except=` — signed-in users; used by the pre-publish checklist.
 - `POST /api/posts`, `PATCH /api/posts/[id]` — any signed-in user who may edit the post; setting a status other than `DRAFT` needs `ADMIN`. The editor always sends the full post, including `status`.
 - `DELETE /api/posts/[id]` — `ADMIN`, and only for a draft that was never published (409 otherwise; archive instead).
 
 ## Not built / leftovers
 
-- `docs/BLOG_ADMIN_SPEC.md` section 12 lists what is built. Scheduling and archiving exist in the data model and the public queries but have no controls in the admin yet.
+- `docs/BLOG_ADMIN_SPEC.md` section 12 lists what is built.
 - Out of scope by decision: RSS, comments, newsletter, visual editor.
 - Deleting a post does not delete its images from Cloudinary.
 - `src/lib/mdx.js`, `src/services/posts/model.js` and `src/services/uploads/actions.js` are empty leftover files.
