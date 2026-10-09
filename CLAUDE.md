@@ -13,9 +13,12 @@ npm run lint     # ESLint (flat config, eslint-config-next/core-web-vitals)
 npx prisma db push                  # sync prisma/schema.prisma to MongoDB (no migrations with the MongoDB provider)
 npx prisma generate                 # regenerate the client (also runs on postinstall)
 node src/scripts/create-admin.js    # upsert the admin user from ADMIN_EMAIL / ADMIN_PASSWORD / ADMIN_NAME in .env.local
+npm run seed:categories             # create the launch categories; safe to run again
 ```
 
 There is no test suite or test runner configured.
+
+On Windows, `prisma generate` (and `prisma db push`, which runs it) fails with `EPERM … query_engine-windows.dll.node` while a dev server is running, because the server holds that file open. Stop the dev server first. Never use `prisma db push --force-reset`.
 
 The `dev` script launches Next through `node --dns-result-order=ipv4first` on purpose (slow IPv6 resolution against MongoDB Atlas) — keep that when editing scripts.
 
@@ -69,21 +72,32 @@ Links to the main site go through `components/layout/MainSiteLink.jsx`: a plain 
 
 ### Data layer
 
-Prisma only: `src/lib/prisma.js` exports a singleton client, schema in `prisma/schema.prisma` (`Post` mapped to the `posts` collection, and `User`). Prisma reads `DATABASE_URL`; the Prisma CLI gets it from `.env` via `prisma.config.ts` (`dotenv/config`), not from `.env.local`.
+Prisma only: `src/lib/prisma.js` exports a singleton client, schema in `prisma/schema.prisma` (`Post` → `posts` collection, `User`, `Category`, `Tag`, `LoginAttempt`). Prisma reads `DATABASE_URL`; the Prisma CLI gets it from `.env` via `prisma.config.ts` (`dotenv/config`), not from `.env.local`.
+
+Every post has a `status` (`DRAFT` / `SCHEDULED` / `PUBLISHED` / `ARCHIVED`), one content type (enum; labels and address slugs in `src/lib/content-types.js`), at most one category, and topics (`Tag` records, many-to-many). The featured image is one JSON field `{ url, publicId, width, height, alt }`.
 
 All post access goes through `src/services/posts/`:
 
-- `queries.js` — reads. Public functions always filter `published: true` and return card objects without content or ids; admin functions are named `…ForAdmin` / `getPostById`.
-- `actions.js` — create / update / delete. Each calls `revalidatePath("/", "layout")`, which is what refreshes statically rendered pages such as `/tags`; any new write path must do the same.
-- `validation.js` — `parsePostInput()` for the editor payload (slug pattern, lengths, max 8 topics, cover must come from our Cloudinary folder).
+- `queries.js` — reads. **`livePostWhere()`** (published, or scheduled with its time passed) decides what a reader may open; **`listedPostWhere(...extra)`** adds "not `noindex`" and is what every listing, search, related-posts query and the main-site API use. Never write a status filter by hand in a public query. Public functions return card objects without content or ids.
+- `actions.js` — create / update / delete. They compute `readingTime`, keep `previousSlugs`, find-or-create topics, and call `revalidatePosts()`.
+- `validation.js` — `parsePostInput()` (zod). Drafts may be incomplete; publishing requires content, excerpt, category, and a featured image with alt text.
+- `slugs.js` — a slug is taken if any post uses it now **or used it before** (`previousSlugs`), and `RESERVED_SLUGS` blocks names of top-level routes, because articles will live at `/blog/<slug>`.
+- `revalidate.js` — `revalidatePosts(before, after)` refreshes the pages a post is on. Any new write path must call it, or statically rendered pages such as `/tags` go stale.
 
-`publishedAt` records the first publish only (unpublishing keeps it). Public ordering is `publishedAt` desc; display falls back to `createdAt` via `postDate()`.
+`publishedAt` records the first publish only (unpublishing keeps it). `updatedAt` changes on every save and is never shown to readers; `contentUpdatedAt` ("Last updated") is set only by a deliberate significant update. `showOnMainSite` only affects the main-site API.
 
-Topics are stored as typed. Prisma cannot search a list ignoring case on MongoDB, so search first matches topic names in JavaScript and then uses `hasSome`.
+Old documents may still carry the pre-spec fields (`published`, `coverUrl`, `coverPublicId`, a `tags` text list). Prisma ignores them; do not rely on them.
+
+Addresses are built by `postPath()` / `tagPath()` in `src/lib/posts.js`. They currently return `/posts/<slug>` and `/tags/<slug>`; spec step 15 moves them to `/<slug>` and `/tag/<slug>` with redirects from the old ones.
 
 ### Markdown
 
 `src/components/mdx/Markdown.jsx` is the single renderer (GFM, heading ids, syntax highlighting, raw HTML dropped, external links in a new tab, Cloudinary-resized images). It has no `"use client"` so the post page renders it on the server and `PostEditor` reuses it for the live preview; keep it free of server-only imports. Its output must sit inside an element with class `article` (styles in `globals.css`).
+
+Two conventions go beyond plain Markdown, both decided by looking at a paragraph's contents:
+
+- two or more images with nothing else in the paragraph (image lines directly under each other) render as a photo grid (`.gallery`), each linking to the full-size image;
+- a bare YouTube address alone in a paragraph renders as `YouTubeEmbed` (thumbnail and play button; the player loads from `youtube-nocookie.com` only on click, and without JavaScript it is a plain link). A YouTube link inside a sentence stays a link. Parsing is in `src/lib/youtube.js`.
 
 `src/lib/toc.js` builds the table of contents with the same slugger order as `rehype-slug`, so ids match the rendered headings.
 
@@ -91,21 +105,27 @@ Topics are stored as typed. Prisma cannot search a list ignoring case on MongoDB
 
 `next.config.mjs` sets a global `next/image` loader, `src/lib/cloudinary-loader.js`, which inserts `f_auto,q_auto,c_limit,w_<width>` into Cloudinary addresses. That file is imported by client code too, so it must not import the Cloudinary SDK (`src/lib/cloudinary.js` is server only).
 
-### Auth
+### Auth and permissions
 
-Credentials provider only (email + bcrypt hash on `User.passwordHash`), JWT sessions, `role` copied onto the token and session in the callbacks. Emails are looked up lower-cased. There is no sign-up flow — the admin user is created by `src/scripts/create-admin.js`. The login page is `/login`.
+Credentials provider only (email + bcrypt hash on `User.passwordHash`), JWT sessions. Emails are looked up lower-cased. There is no sign-up flow — the admin user is created by `src/scripts/create-admin.js`. The login page is `/login` (moves to `/admin/login` in spec step 6).
 
-`/admin/*` is guarded twice: `src/proxy.js` (matcher `/admin/:path*`) and `src/app/admin/layout.js` (`auth()` + redirect). The API route handlers are outside that matcher, so each mutating handler must start with `requireAdmin()` from `src/lib/require-admin.js` (401 without a session, 403 for a non-admin role). There is no login rate limiting yet.
+Permission checks live in `src/lib/authz.js` and read the user **from the database**, not from the session cookie, so a role change or `isActive: false` takes effect at once: `getCurrentUser()`, `requireUser()`, `requireRole("ADMIN")`, `canEditPost(user, post)`, `canSetStatus(user, status)`. The role on the session is only a hint for the UI.
+
+`/admin/*` is guarded twice: `src/proxy.js` (matcher `/admin/:path*`) and `src/app/admin/layout.js` (`getCurrentUser()` + redirect). API route handlers and server actions are outside that matcher, so each one that changes data must start with `requireApiUser()` or `requireAdmin()` from `src/lib/require-admin.js` (wrappers that turn an `AuthzError` into a 401/403 response). Roles are `ADMIN` and `AUTHOR`; only `ADMIN` may publish or delete. Nothing in the UI creates an `AUTHOR` yet.
+
+Login rate limiting (`src/lib/login-rate-limit.js`): every attempt is stored as a `LoginAttempt` keyed by email + IP; after 5 failures in 15 minutes the next attempts are refused with the code `rate_limited`, whether or not the email exists. A successful sign-in resets the count; attempts older than 24 hours are deleted on each login. To unblock yourself locally, delete the `LoginAttempt` documents.
 
 ### API
 
-- `GET /api/posts?limit=` — **public, and a contract with the main site** (its home page shows the newest posts). Shape, caching header and rules are in `docs/design-brief.md` §8; do not add fields such as content or ids, and coordinate any change with the main site.
-- `POST /api/posts`, `PATCH` / `DELETE /api/posts/[id]` — admin. The editor always sends the full post, including `published`.
-- `POST /api/upload` — admin; JPEG/PNG/WebP/GIF/AVIF, max 4 MB (Vercel's request body limit), stored in `UPLOAD_FOLDER`.
+- `GET /api/posts?limit=` — **public, and a contract with the main site** (its home page shows the newest posts). Only listed posts with `showOnMainSite` on. The shape, caching header and rules are in `docs/main-site-api.md`; fields may be added but not removed or renamed, and never content or ids.
+- `POST /api/posts`, `PATCH /api/posts/[id]` — any signed-in user who may edit the post; setting a status other than `DRAFT` needs `ADMIN`. The editor always sends the full post, including `status`.
+- `DELETE /api/posts/[id]` — `ADMIN`.
+- `POST /api/upload` — signed-in users; JPEG/PNG/WebP/GIF/AVIF, max 4 MB (Vercel's request body limit), stored in `UPLOAD_FOLDER`. To be replaced by signed direct uploads in spec step 8.
 
 ## Not built / leftovers
 
-- Out of scope by decision: RSS, comments, newsletter, visual editor, several authors, scheduled publishing.
+- `docs/BLOG_ADMIN_SPEC.md` section 12 lists what is built. Scheduling and archiving exist in the data model and the public queries but have no controls in the admin yet.
+- Out of scope by decision: RSS, comments, newsletter, visual editor.
 - Deleting a post does not delete its images from Cloudinary.
 - `src/lib/mdx.js`, `src/services/posts/model.js` and `src/services/uploads/actions.js` are empty leftover files.
 
@@ -113,7 +133,7 @@ Credentials provider only (email + bcrypt hash on `User.passwordHash`), JWT sess
 
 `.env` (Prisma CLI): `DATABASE_URL`
 
-`.env.local`: `DATABASE_URL`, `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`, `CLOUDINARY_UPLOAD_FOLDER` (optional, defaults to `raselrana-blog`), `NEXT_PUBLIC_BASE_PATH` (`/blog`), `AUTH_SECRET`, `AUTH_URL`, `BLOG_INDEXABLE`, plus `ADMIN_EMAIL` / `ADMIN_PASSWORD` / `ADMIN_NAME` for the admin script only. `.env.example` lists them all.
+`.env.local`: `DATABASE_URL`, `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`, `CLOUDINARY_UPLOAD_FOLDER` (optional, defaults to `raselrana-blog`), `NEXT_PUBLIC_BASE_PATH` (`/blog`), `AUTH_SECRET`, `AUTH_URL`, `BLOG_INDEXABLE`, plus `ADMIN_EMAIL` / `ADMIN_PASSWORD` / `ADMIN_NAME` / `ADMIN_USERNAME` for the admin script only. `.env.example` lists them all.
 
 `BLOG_INDEXABLE=true` lets search engines index the public pages; anything else keeps the whole site `noindex`. It is off until launch.
 

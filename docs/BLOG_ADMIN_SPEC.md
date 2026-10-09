@@ -632,14 +632,14 @@ Statuses below are from the audit of 2026-10-09 and are updated as steps are bui
 | # | Item | Status | Notes |
 |---|---|---|---|
 | 1 | Audit | ✅ | Done 2026-10-09. Conflicts and decisions are recorded in section 2. |
-| 2 | Prisma schema | 🟡 | `Post` and `User` exist with fewer fields. No `Category`, `Tag`, `LoginAttempt` or enums. |
-| 3 | Content types + category seed | ❌ | |
-| 4 | Authz + rate limiting | 🟡 | `src/lib/require-admin.js` guards the write handlers. No `requireUser` / `canEditPost`, no rate limiting. |
-| 5 | Query helpers | 🟡 | Reading time, slugify and excerpt fallback exist in `src/lib/posts.js`. No `livePostWhere`, no `previousSlugs`; revalidation refreshes everything. |
+| 2 | Prisma schema | ✅ | Merged and pushed 2026-10-09. The one existing post and the admin user were converted in place (old fields left on the documents). `categoryId` optional, `excerpt` defaults to empty, `showOnMainSite` added (section 2). |
+| 3 | Content types + category seed | ✅ | `src/lib/content-types.js`, `src/scripts/seed-categories.js`, `npm run seed:categories`. Seed run; six categories exist. |
+| 4 | Authz + rate limiting | ✅ | `src/lib/authz.js`, `src/lib/login-rate-limit.js`; every write handler goes through `src/lib/require-admin.js`. Tested: 6th attempt blocked, inactive user locked out. |
+| 5 | Query helpers | ✅ | `livePostWhere` / `listedPostWhere` in `queries.js`, `slugs.js`, `revalidate.js`, zod validation, stored `readingTime`. The old-slug redirect itself is step 16. |
 | 6 | Admin layout + Overview | 🟡 | Top bar instead of a sidebar; dashboard has counts and a list only. Login is at `/login`. |
 | 7 | Posts list | 🟡 | Post list with edit/delete on the dashboard. No filters, search, paging, duplicate or archive. |
 | 8 | Cloudinary upload | ⚠️ | Works through the server (`/api/upload`). Decision: switch to signed direct uploads (section 2). |
-| 9 | Post editor (save) | 🟡 | Title, slug, excerpt, topics, cover, Markdown, live preview, insert image. Plain textarea; no SEO fields. |
+| 9 | Post editor (save) | 🟡 | Has title, slug (with the published-slug warning), excerpt, category, content type, topics, featured image with alt text, "Show on main site", Markdown with live preview, insert image / gallery / video. Still a plain textarea; no SEO fields, related posts, toolbar or shortcuts. |
 | 10 | Preview + autosave | 🟡 | Instant in-browser preview. No `/preview/[id]`, no autosave. |
 | 11 | Publish flow + checklist | 🟡 | Save draft / publish / unpublish only. |
 | 12 | Categories admin | ❌ | |
