@@ -1,33 +1,29 @@
 "use client";
 
-import { useState } from "react";
+import { buttonSmall } from "@/lib/ui";
+import { uploadImage } from "@/lib/upload-client";
+import { useRef, useState } from "react";
 
-export default function ImageUploader({ onUploaded }) {
+/** A button that picks an image, uploads it, and hands `{ url, publicId, width, height }` to `onUploaded`. */
+export default function ImageUploader({
+  onUploaded,
+  label = "Upload image",
+  disabled = false,
+}) {
+  const inputRef = useRef(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState(null);
 
-  const basePath = process.env.NEXT_PUBLIC_BASE_PATH || "";
-
   const handleFileChange = async (e) => {
     const file = e.target.files?.[0];
+    e.target.value = ""; // allow picking the same file again
     if (!file) return;
 
     setUploading(true);
     setError(null);
 
     try {
-      const formData = new FormData();
-      formData.append("file", file);
-
-      const res = await fetch(`${basePath}/api/upload`, {
-        method: "POST",
-        body: formData,
-      });
-
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || "Upload failed");
-
-      onUploaded?.(data); // { url, publicId, width, height }
+      onUploaded?.(await uploadImage(file), file);
     } catch (err) {
       console.error(err);
       setError(err.message || "Image upload failed. Please try again.");
@@ -37,16 +33,29 @@ export default function ImageUploader({ onUploaded }) {
   };
 
   return (
-    <div className="space-y-2">
+    <div className="inline-flex flex-wrap items-center gap-3">
       <input
+        ref={inputRef}
         type="file"
-        accept="image/*"
+        accept="image/jpeg,image/png,image/webp,image/gif,image/avif"
         onChange={handleFileChange}
-        disabled={uploading}
-        className="block w-full text-sm text-gray-700 file:mr-4 file:rounded-md file:border-0 file:bg-gray-100 file:px-4 file:py-2 file:text-sm file:font-medium hover:file:bg-gray-200"
+        className="sr-only"
+        tabIndex={-1}
+        aria-hidden
       />
-      {uploading && <p className="text-sm text-gray-500">Uploading…</p>}
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      <button
+        type="button"
+        onClick={() => inputRef.current?.click()}
+        disabled={disabled || uploading}
+        className={buttonSmall}
+      >
+        {uploading ? "Uploading…" : label}
+      </button>
+      {error && (
+        <p role="alert" className="text-sm text-[var(--danger)]">
+          {error}
+        </p>
+      )}
     </div>
   );
 }
