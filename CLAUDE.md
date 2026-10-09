@@ -29,6 +29,12 @@ Do not upgrade Prisma past 6.x: Prisma 7 has no MongoDB support and Prisma 8's i
 
 Next 16 conventions apply: the request interceptor is `src/proxy.js` (not `middleware.js`), and `params` / `searchParams` in pages are Promises that must be awaited.
 
+## Build spec
+
+Build spec for admin + categories: see docs/BLOG_ADMIN_SPEC.md. Always run the audit (section 1) first and keep the progress table (section 12) updated.
+
+Where the spec and the code disagree, the "Audit corrections and owner decisions" table in its section 2 wins.
+
 ## Design: shared with the main site
 
 `docs/design-brief.md` is the specification from the main site project (`raselrana-web`) and the source of truth for look, structure and the public API. Read it before changing anything visual.
