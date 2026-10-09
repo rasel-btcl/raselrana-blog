@@ -6,7 +6,7 @@ import { useRef, useState } from "react";
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH || "";
 
-export default function DeletePostButton({ id, title }) {
+export default function DeletePostButton({ id, title, className }) {
   const router = useRouter();
   // A native <dialog> opened with showModal() sits in the browser's top layer,
   // so it is not affected by transformed or clipped parents.
@@ -45,7 +45,7 @@ export default function DeletePostButton({ id, title }) {
           setError(null);
           dialogRef.current?.showModal();
         }}
-        className={`${buttonSmall} hover:border-[var(--danger)] hover:text-[var(--danger)]`}
+        className={`${className ?? buttonSmall} hover:border-[var(--danger)] hover:text-[var(--danger)]`}
       >
         Delete
       </button>

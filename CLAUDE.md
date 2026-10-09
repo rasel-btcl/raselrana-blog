@@ -13,9 +13,12 @@ npm run lint     # ESLint (flat config, eslint-config-next/core-web-vitals)
 npx prisma db push                  # sync prisma/schema.prisma to MongoDB (no migrations with the MongoDB provider)
 npx prisma generate                 # regenerate the client (also runs on postinstall)
 node src/scripts/create-admin.js    # upsert the admin user from ADMIN_EMAIL / ADMIN_PASSWORD / ADMIN_NAME in .env.local
+npm run seed:categories             # create the launch categories; safe to run again
 ```
 
 There is no test suite or test runner configured.
+
+On Windows, `prisma generate` (and `prisma db push`, which runs it) fails with `EPERM … query_engine-windows.dll.node` while a dev server is running, because the server holds that file open. Stop the dev server first. Never use `prisma db push --force-reset`.
 
 The `dev` script launches Next through `node --dns-result-order=ipv4first` on purpose (slow IPv6 resolution against MongoDB Atlas) — keep that when editing scripts.
 
@@ -28,6 +31,12 @@ Next.js 16 (App Router) + React 19, plain JavaScript (`.js`/`.jsx`, no TypeScrip
 Do not upgrade Prisma past 6.x: Prisma 7 has no MongoDB support and Prisma 8's is early access. `next-auth` stays on the v5 beta line (npm's `latest` tag is the older v4).
 
 Next 16 conventions apply: the request interceptor is `src/proxy.js` (not `middleware.js`), and `params` / `searchParams` in pages are Promises that must be awaited.
+
+## Build spec
+
+Build spec for admin + categories: see docs/BLOG_ADMIN_SPEC.md. Always run the audit (section 1) first and keep the progress table (section 12) updated.
+
+Where the spec and the code disagree, the "Audit corrections and owner decisions" table in its section 2 wins.
 
 ## Design: shared with the main site
 
@@ -48,7 +57,7 @@ This app is one zone of `raselrana.com.bd`. It is deployed as its own Vercel pro
 The basePath is the main source of subtle bugs here:
 
 - `next/link`, `next/navigation` `redirect()` and `router.push()` add it automatically — write paths without `/blog`.
-- Client-side `fetch` calls, native `<form action>` and `signOut({ callbackUrl })` do not get it; they prefix `process.env.NEXT_PUBLIC_BASE_PATH` (`src/lib/upload-client.js`, `PostEditor`, `SearchForm`, `SignOutButton`).
+- Client-side `fetch` calls, native `<form action>` and `signOut({ callbackUrl })` do not get it; they prefix `process.env.NEXT_PUBLIC_BASE_PATH` (`PostEditor`, `SearchForm`, the posts-list filter form, `SignOutButton`). Server actions need nothing.
 - Auth.js needs it stated explicitly: the server config uses `basePath: "/api/auth"` (`src/lib/auth.js`), while the client `SessionProvider` uses `${NEXT_PUBLIC_BASE_PATH}/api/auth` (`src/providers/auth-provider.js`). The `pages` paths in the Auth.js config are used verbatim, so they include the prefix. `AUTH_URL` must match the deployed origin.
 - In `src/proxy.js` the request passed by the `auth()` wrapper has lost the basePath (`req.nextUrl.clone()` does not restore it), so the login redirect is built from `NEXT_PUBLIC_BASE_PATH`.
 - Metadata URLs (canonical, Open Graph) are written in full via `postUrl()` / `BLOG_URL` in `src/lib/posts.js`.
@@ -58,48 +67,91 @@ Links to the main site go through `components/layout/MainSiteLink.jsx`: a plain 
 ### Route layout
 
 - `src/app/layout.js` — fonts, theme provider, default metadata. No menu.
-- `src/app/(site)/` — public pages; its layout adds `SiteHeader` and `SiteFooter`. `src/app/not-found.jsx` sits outside the group and includes them itself.
-- `src/app/admin/` and `src/app/login/` — their layouts add the Auth.js `SessionProvider` (kept off public pages so they make no session request) and `robots: noindex`.
+- `src/app/(site)/` — public pages; its layout adds `SiteHeader`, the category row (`components/layout/CategoryBar.jsx`) and `SiteFooter`. `src/app/not-found.jsx` sits outside the group and includes header and footer itself.
+- Public addresses: article `/<slug>` (`(site)/[slug]`, flat, never with the category), `/category/[slug]` (`?type=` filters by content type), `/type/[type]`, `/tag/[slug]`, `/tags` (all topics), `/author/[username]`, `/preview/[id]`. The article route is a catch-all at the top level: static folders beside it win, and `RESERVED_SLUGS` in `src/services/posts/slugs.js` must list every such folder, so add a name there when adding a top-level route.
+- Old addresses redirect permanently in `next.config.mjs` (`/posts/<slug>`, `/tags/<slug>`, old admin paths). A renamed post's old slug redirects from the article page itself (`getCurrentSlugFor()`).
+- `src/app/sitemap.js` → `/blog/sitemap.xml`: listed articles, plus category, type and topic pages that have posts (topics need two). The main site's robots.txt or sitemap index has to point to it; nothing in this app does.
+- `src/app/admin/layout.js` — adds the Auth.js `SessionProvider` (kept off public pages so they make no session request) and `robots: noindex` for everything under `/admin`.
+- `src/app/admin/login/` — the sign-in page. It must stay outside the `(panel)` group, or the access check would redirect it to itself.
+- `src/app/admin/(panel)/` — the signed-in area: its layout checks the user, renders the sidebar (`components/admin/AdminNav.jsx`) and is `force-dynamic`. Overview at `/admin`, posts at `/admin/posts`, editor at `/admin/posts/new` and `/admin/posts/[id]/edit`.
+- Row actions on the posts list are server actions in `admin/(panel)/posts/actions.js`. A server action can be called without loading the page, so each one calls `requireUser()` / `requireRole()` and validates its input with zod.
+- Categories, tags and profile (`admin/(panel)/categories|tags|profile`) are plain server-rendered forms. Their actions go through `runAdminAction()` in `src/lib/admin-action.js`, which checks the user (ADMIN unless `admin: false`), turns zod / `ActionError` / duplicate-key problems into a message, and redirects back with `?ok=` or `?error=` for `components/admin/Notice.jsx`. Throw `ActionError` for anything the person can fix. The logic and zod schemas live in `src/services/taxonomy/` and `src/services/users/`.
 
 ### Data layer
 
-Prisma only: `src/lib/prisma.js` exports a singleton client, schema in `prisma/schema.prisma` (`Post` mapped to the `posts` collection, and `User`). Prisma reads `DATABASE_URL`; the Prisma CLI gets it from `.env` via `prisma.config.ts` (`dotenv/config`), not from `.env.local`.
+Prisma only: `src/lib/prisma.js` exports a singleton client, schema in `prisma/schema.prisma` (`Post` → `posts` collection, `User`, `Category`, `Tag`, `LoginAttempt`). Prisma reads `DATABASE_URL`; the Prisma CLI gets it from `.env` via `prisma.config.ts` (`dotenv/config`), not from `.env.local`.
+
+Every post has a `status` (`DRAFT` / `SCHEDULED` / `PUBLISHED` / `ARCHIVED`), one content type (enum; labels and address slugs in `src/lib/content-types.js`), at most one category, and topics (`Tag` records, many-to-many). The featured image is one JSON field `{ url, publicId, width, height, alt }`.
 
 All post access goes through `src/services/posts/`:
 
-- `queries.js` — reads. Public functions always filter `published: true` and return card objects without content or ids; admin functions are named `…ForAdmin` / `getPostById`.
-- `actions.js` — create / update / delete. Each calls `revalidatePath("/", "layout")`, which is what refreshes statically rendered pages such as `/tags`; any new write path must do the same.
-- `validation.js` — `parsePostInput()` for the editor payload (slug pattern, lengths, max 8 topics, cover must come from our Cloudinary folder).
+- `queries.js` — reads. **`livePostWhere()`** (published, or scheduled with its time passed) decides what a reader may open; **`listedPostWhere(...extra)`** adds "not `noindex`" and is what every listing, search, related-posts query and the main-site API use. Never write a status filter by hand in a public query. Public functions return card objects without content or ids.
+- `actions.js` — create / update / delete. They compute `readingTime`, keep `previousSlugs`, find-or-create topics, and call `revalidatePosts()`.
+- `validation.js` — `parsePostInput()` (zod). Drafts and archived posts may be incomplete; publishing or scheduling requires content, excerpt, category, and a featured image with alt text, and scheduling a future date.
+- `slugs.js` — a slug is taken if any post uses it now **or used it before** (`previousSlugs`), and `RESERVED_SLUGS` blocks names of top-level routes, because articles will live at `/blog/<slug>`.
+- `revalidate.js` — `revalidatePosts(before, after)` refreshes the pages a post is on. Any new write path must call it, or statically rendered pages such as `/tags` go stale.
 
-`publishedAt` records the first publish only (unpublishing keeps it). Public ordering is `publishedAt` desc; display falls back to `createdAt` via `postDate()`.
+`publishedAt` is the first publish time, or for a `SCHEDULED` post the time it goes live (`nextPublishedAt()` in `actions.js` holds the rules: unpublishing keeps it, a future date is dropped when a post goes back to draft, publishing a never-public post stamps now). Scheduling needs no cron: `livePostWhere()` compares with the clock. `updatedAt` changes on every save and is never shown to readers; `contentUpdatedAt` ("Last updated") is set only by a deliberate significant update. `showOnMainSite` only affects the main-site API.
 
-Topics are stored as typed. Prisma cannot search a list ignoring case on MongoDB, so search first matches topic names in JavaScript and then uses `hasSome`.
+A `Tag` that was never attached to a post has no `postIds` field in MongoDB, and Prisma's `isEmpty` filter does not match a missing field; count unused topics in JavaScript (`getUnusedTagIds()` in `src/services/taxonomy/tags.js`).
+
+Old documents may still carry the pre-spec fields (`published`, `coverUrl`, `coverPublicId`, a `tags` text list). Prisma ignores them; do not rely on them.
+
+Addresses are built by `postPath()`, `tagPath()`, `categoryPath()`, `typePath()` and `authorPath()` in `src/lib/posts.js`; never write them by hand. `revalidatePosts()` uses the same functions.
+
+Pages that read `searchParams` or a dynamic segment are rendered per request, so a scheduled post appears on them the moment its time passes. `/tags` and the sitemap are cached with `revalidate = 300`.
+
+### Editor
+
+`components/blog/PostEditor.jsx` (client) holds all fields in state and talks to the REST handlers. Things that are easy to break:
+
+- **Autosave** runs only while the post is a draft, 3 seconds after the last change, and never changes the status. The first save of a new post creates it and swaps the address with `history.replaceState`, on purpose without a navigation, so typing is not interrupted. Autosaves do not overwrite field state with the server's answer; manual saves do.
+- Going public (Publish / Schedule / Update) always goes through `goPublic()`, which runs `components/admin/editor/checklist.js` plus the server slug check and shows the checklist dialog; other buttons call `save()` directly.
+- The publish date is typed and shown in Asia/Dhaka time and stored in UTC.
+- `components/admin/editor/MarkdownEditor.jsx` wraps CodeMirror 6. Its colours come from the CSS tokens, so it follows the theme by itself. The CodeMirror extensions are created once at module level; Ctrl+S reaches React through a DOM event, because the lint rules forbid reading refs while building them.
+- The in-editor preview renders `Markdown.jsx` directly. `/preview/[id]` renders the saved post with `components/blog/PostArticle.jsx`, the same component the public post page uses.
 
 ### Markdown
 
 `src/components/mdx/Markdown.jsx` is the single renderer (GFM, heading ids, syntax highlighting, raw HTML dropped, external links in a new tab, Cloudinary-resized images). It has no `"use client"` so the post page renders it on the server and `PostEditor` reuses it for the live preview; keep it free of server-only imports. Its output must sit inside an element with class `article` (styles in `globals.css`).
 
+Four conventions go beyond plain Markdown, both decided by looking at a paragraph's contents:
+
+- two or more images with nothing else in the paragraph (image lines directly under each other) render as a photo grid (`.gallery`), each linking to the full-size image;
+- a blockquote starting with `[!NOTE]`, `[!TIP]` or `[!WARNING]` renders as a callout box (`src/lib/rehype-callouts.js`);
+- one image with a title, `![alt](url "caption")`, renders as a `<figure>` with that caption;
+- a bare YouTube address alone in a paragraph renders as `YouTubeEmbed` (thumbnail and play button; the player loads from `youtube-nocookie.com` only on click, and without JavaScript it is a plain link). A YouTube link inside a sentence stays a link. Parsing is in `src/lib/youtube.js`.
+
 `src/lib/toc.js` builds the table of contents with the same slugger order as `rehype-slug`, so ids match the rendered headings.
 
 ### Images
 
+Uploads go **straight from the browser to Cloudinary**; no file passes through this app. `signImageUpload()` (a server action in `src/services/uploads/actions.js`, guarded by `requireUser()`) signs the folder, the allowed formats and a timestamp; `src/lib/upload-client.js` then posts the file with those fields. Anything Cloudinary should enforce must be in the signed parameters. Images land in `<UPLOAD_FOLDER>/posts/<post-id>/` (`unassigned` for a post not saved yet); profile pictures in `<UPLOAD_FOLDER>/avatars/`. The rules shared by both sides (formats, 5 MB, no SVG) are in `src/lib/upload-rules.js`; the size limit is checked in the browser only.
+
 `next.config.mjs` sets a global `next/image` loader, `src/lib/cloudinary-loader.js`, which inserts `f_auto,q_auto,c_limit,w_<width>` into Cloudinary addresses. That file is imported by client code too, so it must not import the Cloudinary SDK (`src/lib/cloudinary.js` is server only).
 
-### Auth
+### Auth and permissions
 
-Credentials provider only (email + bcrypt hash on `User.passwordHash`), JWT sessions, `role` copied onto the token and session in the callbacks. Emails are looked up lower-cased. There is no sign-up flow — the admin user is created by `src/scripts/create-admin.js`. The login page is `/login`.
+Credentials provider only (email + bcrypt hash on `User.passwordHash`), JWT sessions. Emails are looked up lower-cased. There is no sign-up flow — the admin user is created by `src/scripts/create-admin.js`. The login page is `/admin/login`.
 
-`/admin/*` is guarded twice: `src/proxy.js` (matcher `/admin/:path*`) and `src/app/admin/layout.js` (`auth()` + redirect). The API route handlers are outside that matcher, so each mutating handler must start with `requireAdmin()` from `src/lib/require-admin.js` (401 without a session, 403 for a non-admin role). There is no login rate limiting yet.
+Permission checks live in `src/lib/authz.js` and read the user **from the database**, not from the session cookie, so a role change or `isActive: false` takes effect at once: `getCurrentUser()`, `requireUser()`, `requireRole("ADMIN")`, `canEditPost(user, post)`, `canSetStatus(user, status)`. The role on the session is only a hint for the UI.
+
+`/admin/*` is guarded twice: `src/proxy.js` (matcher `/admin/:path*`, letting `/admin/login` through) and `src/app/admin/(panel)/layout.js` (`getCurrentUser()` + redirect). The proxy must not redirect a signed-in visitor away from the login page: a disabled account still has a cookie and would loop. API route handlers and server actions are outside that matcher, so each one that changes data must start with `requireApiUser()` or `requireAdmin()` from `src/lib/require-admin.js` (wrappers that turn an `AuthzError` into a 401/403 response). Roles are `ADMIN` and `AUTHOR`; only `ADMIN` may publish or delete. Nothing in the UI creates an `AUTHOR` yet.
+
+Login rate limiting (`src/lib/login-rate-limit.js`): every attempt is stored as a `LoginAttempt` keyed by email + IP; after 5 failures in 15 minutes the next attempts are refused with the code `rate_limited`, whether or not the email exists. A successful sign-in resets the count; attempts older than 24 hours are deleted on each login. To unblock yourself locally, delete the `LoginAttempt` documents.
 
 ### API
 
-- `GET /api/posts?limit=` — **public, and a contract with the main site** (its home page shows the newest posts). Shape, caching header and rules are in `docs/design-brief.md` §8; do not add fields such as content or ids, and coordinate any change with the main site.
-- `POST /api/posts`, `PATCH` / `DELETE /api/posts/[id]` — admin. The editor always sends the full post, including `published`.
-- `POST /api/upload` — admin; JPEG/PNG/WebP/GIF/AVIF, max 4 MB (Vercel's request body limit), stored in `UPLOAD_FOLDER`.
+- The article page embeds `TechArticle` JSON-LD; `dateModified` is `contentUpdatedAt ?? publishedAt`, never `updatedAt`.
+- `GET /api/posts?limit=` — **public, and a contract with the main site** (its home page shows the newest posts). Only listed posts with `showOnMainSite` on. The shape, caching header and rules are in `docs/main-site-api.md`; fields may be added but not removed or renamed, and never content or ids.
+- `GET /api/posts/slug-check?slug=&except=` — signed-in users; used by the pre-publish checklist.
+- `POST /api/posts`, `PATCH /api/posts/[id]` — any signed-in user who may edit the post; setting a status other than `DRAFT` needs `ADMIN`. The editor always sends the full post, including `status`.
+- `DELETE /api/posts/[id]` — `ADMIN`, and only for a draft that was never published (409 otherwise; archive instead).
 
 ## Not built / leftovers
 
-- Out of scope by decision: RSS, comments, newsletter, visual editor, several authors, scheduled publishing.
+- `docs/BLOG_ADMIN_SPEC.md` section 12 lists what is built.
+- Out of scope by decision: RSS, comments, newsletter, visual editor.
 - Deleting a post does not delete its images from Cloudinary.
 - `src/lib/mdx.js`, `src/services/posts/model.js` and `src/services/uploads/actions.js` are empty leftover files.
 
@@ -107,7 +159,7 @@ Credentials provider only (email + bcrypt hash on `User.passwordHash`), JWT sess
 
 `.env` (Prisma CLI): `DATABASE_URL`
 
-`.env.local`: `DATABASE_URL`, `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`, `CLOUDINARY_UPLOAD_FOLDER` (optional, defaults to `raselrana-blog`), `NEXT_PUBLIC_BASE_PATH` (`/blog`), `AUTH_SECRET`, `AUTH_URL`, `BLOG_INDEXABLE`, plus `ADMIN_EMAIL` / `ADMIN_PASSWORD` / `ADMIN_NAME` for the admin script only. `.env.example` lists them all.
+`.env.local`: `DATABASE_URL`, `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`, `CLOUDINARY_UPLOAD_FOLDER` (optional, defaults to `raselrana-blog`), `NEXT_PUBLIC_BASE_PATH` (`/blog`), `AUTH_SECRET`, `AUTH_URL`, `BLOG_INDEXABLE`, plus `ADMIN_EMAIL` / `ADMIN_PASSWORD` / `ADMIN_NAME` / `ADMIN_USERNAME` for the admin script only. `.env.example` lists them all.
 
 `BLOG_INDEXABLE=true` lets search engines index the public pages; anything else keeps the whole site `noindex`. It is off until launch.
 

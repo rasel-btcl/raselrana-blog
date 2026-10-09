@@ -7,10 +7,18 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "seed:categories": "node src/scripts/seed-categories.js",
     "postinstall": "prisma generate"
   },
   "dependencies": {
+    "@codemirror/commands": "^6.11.1",
+    "@codemirror/lang-markdown": "^6.5.2",
+    "@codemirror/language": "^6.13.1",
+    "@codemirror/state": "^6.7.6",
+    "@codemirror/view": "^6.43.14",
+    "@lezer/highlight": "^1.2.5",
     "@prisma/client": "^6.12.0",
+    "@uiw/react-codemirror": "^4.25.12",
     "@vercel/analytics": "^2.0.1",
     "bcryptjs": "^3.0.3",
     "cloudinary": "^2.11.0",
@@ -28,7 +36,8 @@
     "remark-gfm": "^4.0.1",
     "remark-parse": "^11.0.0",
     "unified": "^11.0.5",
-    "unist-util-visit": "^5.1.0"
+    "unist-util-visit": "^5.1.0",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

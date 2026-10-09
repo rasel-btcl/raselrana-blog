@@ -3,6 +3,9 @@ import { container, pageHeading, pageLabel } from "@/lib/ui";
 import { getTagCounts } from "@/services/posts/queries";
 import Link from "next/link";
 
+// Rebuilt at most every 5 minutes, so a scheduled post shows up by itself.
+export const revalidate = 300;
+
 export const metadata = {
   title: "Topics",
   description: "Every topic on Rasel Rana's blog, with the posts in each.",
@@ -32,14 +35,14 @@ export default async function TopicsPage() {
             <p className="text-[var(--slate)]">No topics yet.</p>
           ) : (
             <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {topics.map(({ tag, count }) => (
-                <li key={tag}>
+              {topics.map(({ name, slug, count }) => (
+                <li key={slug}>
                   <Link
-                    href={tagPath(tag)}
+                    href={tagPath(slug)}
                     className="group flex items-center justify-between gap-4 rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-6 transition-colors hover:border-[var(--signal)]"
                   >
                     <span className="font-display text-xl font-medium text-[var(--ink)] transition-colors group-hover:text-[var(--signal)]">
-                      {tag}
+                      {name}
                     </span>
                     <span className="shrink-0 font-mono text-xs text-[var(--slate)]">
                       {count} {count === 1 ? "post" : "posts"}

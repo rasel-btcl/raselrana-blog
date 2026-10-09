@@ -23,6 +23,28 @@ const nextConfig = {
       },
     ],
   },
+  // Old addresses keep working. The base path is added automatically.
+  async redirects() {
+    return [
+      // Articles and topics before docs/BLOG_ADMIN_SPEC.md step 15; the main site
+      // may still link to /blog/posts/<slug>.
+      { source: "/posts/:slug", destination: "/:slug", permanent: true },
+      { source: "/tags/:slug", destination: "/tag/:slug", permanent: true },
+      // Admin addresses before step 6.
+      { source: "/login", destination: "/admin/login", permanent: true },
+      { source: "/admin/dashboard", destination: "/admin", permanent: true },
+      {
+        source: "/admin/new-post",
+        destination: "/admin/posts/new",
+        permanent: true,
+      },
+      {
+        source: "/admin/:id([a-f0-9]{24})/edit",
+        destination: "/admin/posts/:id/edit",
+        permanent: true,
+      },
+    ];
+  },
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
   },

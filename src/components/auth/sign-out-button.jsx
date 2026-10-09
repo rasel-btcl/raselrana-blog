@@ -9,7 +9,7 @@ export default function SignOutButton() {
   return (
     <button
       type="button"
-      onClick={() => signOut({ callbackUrl: `${basePath}/login` })}
+      onClick={() => signOut({ callbackUrl: `${basePath}/admin/login` })}
       className={buttonSmall}
     >
       Sign out
