@@ -5,18 +5,31 @@ export const BLOG_URL = `${SITE_URL}/blog`;
 
 export const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
-export function postUrl(slug) {
-  return `${BLOG_URL}/posts/${slug}`;
+// Addresses inside the blog, written without the /blog base path (next/link adds it).
+// Articles move to `/<slug>` and topics to `/tag/<slug>` in spec step 15; changing
+// these two functions is then enough.
+export function postPath(slug) {
+  return `/posts/${slug}`;
 }
 
-export function tagPath(tag) {
-  return `/tags/${encodeURIComponent(tag)}`;
+export function tagPath(slug) {
+  return `/tags/${slug}`;
+}
+
+/** Root-relative address on raselrana.com.bd, e.g. for the main site to link to. */
+export function publicPostPath(slug) {
+  return `/blog${postPath(slug)}`;
+}
+
+/** Full public address, for canonical / Open Graph / sharing. */
+export function postUrl(slug) {
+  return `${SITE_URL}${publicPostPath(slug)}`;
 }
 
 export function slugify(text) {
   return text
     .normalize("NFKD")
-    .replace(/[̀-ͯ]/g, "")
+    .replace(/\p{M}/gu, "") // accents left over from NFKD
     .toLowerCase()
     .replace(/['’]/g, "")
     .replace(/[^a-z0-9]+/g, "-")
@@ -45,11 +58,29 @@ export function readingMinutes(markdown) {
   return Math.max(1, Math.ceil(words / 200));
 }
 
+/** The first block of a post that is ordinary text (not a heading, image, code, table, quote or list). */
+function firstParagraph(markdown) {
+  const withoutCode = markdown
+    .replace(/```[\s\S]*?```/g, "")
+    .replace(/~~~[\s\S]*?~~~/g, "");
+  const notProse = /^(#{1,6}\s|>|[-*+]\s|\d+\.\s|\||!\[|https?:\/\/\S+$)/;
+
+  for (const block of withoutCode.split(/\r?\n\s*\r?\n/)) {
+    const trimmed = block.trim();
+    if (!trimmed || notProse.test(trimmed)) continue;
+    const text = plainText(trimmed);
+    if (text) return text;
+  }
+  return "";
+}
+
+/** The post's own excerpt, or about 160 characters from its first paragraph. */
 export function excerptFor(post, maxLength = 160) {
   const own = post.excerpt?.trim();
   if (own) return own;
 
-  const text = plainText(post.content ?? "");
+  const content = post.content ?? "";
+  const text = firstParagraph(content) || plainText(content);
   if (text.length <= maxLength) return text;
 
   const cut = text.slice(0, maxLength);

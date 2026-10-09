@@ -6,19 +6,15 @@ import ShareRow from "@/components/blog/ShareRow";
 import TableOfContents from "@/components/blog/TableOfContents";
 import TagChip from "@/components/blog/TagChip";
 import Markdown from "@/components/mdx/Markdown";
-import { cloudinaryUrl, isCloudinaryImage } from "@/lib/cloudinary-loader";
-import {
-  excerptFor,
-  formatDate,
-  postDate,
-  postUrl,
-  readingMinutes,
-} from "@/lib/posts";
+import { cloudinaryUrl } from "@/lib/cloudinary-loader";
+import { contentTypeByValue } from "@/lib/content-types";
+import { formatDate, postDate, postUrl } from "@/lib/posts";
 import { getTableOfContents } from "@/lib/toc";
 import { container, metaLine, sectionHeading } from "@/lib/ui";
 import {
+  coverOf,
   getAdjacentPosts,
-  getPublishedPostBySlug,
+  getLivePostBySlug,
   getRelatedPosts,
 } from "@/services/posts/queries";
 import Image from "next/image";
@@ -29,43 +25,51 @@ const ARTICLE_ID = "post-article";
 
 export async function generateMetadata({ params }) {
   const { slug } = await params;
-  const post = await getPublishedPostBySlug(slug);
+  const post = await getLivePostBySlug(slug);
   if (!post) return {};
 
-  const description = excerptFor(post);
+  const title = post.seoTitle || post.title;
+  const description = post.seoDescription || post.excerpt;
   const url = postUrl(post.slug);
-  const cover = isCloudinaryImage(post.coverUrl)
-    ? cloudinaryUrl(post.coverUrl, 1200)
-    : null;
+
+  // The picture social networks show when the link is shared: the featured image,
+  // unless the post names another one.
+  const cover = coverOf(post);
+  const shareImage =
+    post.ogImageUrl || (cover ? cloudinaryUrl(cover.url, 1200) : null);
 
   return {
-    title: post.title,
+    title,
     description,
-    alternates: { canonical: url },
+    alternates: { canonical: post.canonicalUrl || url },
+    ...(post.noindex ? { robots: { index: false, follow: true } } : {}),
     openGraph: {
       type: "article",
-      title: post.title,
+      title,
       description,
       url,
       siteName: "Rasel Rana",
       publishedTime: postDate(post).toISOString(),
-      modifiedTime: post.updatedAt.toISOString(),
+      modifiedTime: (post.contentUpdatedAt ?? postDate(post)).toISOString(),
       authors: ["Rasel Rana"],
-      tags: post.tags,
-      images: cover ? [{ url: cover }] : undefined,
+      section: post.category?.name,
+      tags: post.tags.map((tag) => tag.name),
+      images: shareImage
+        ? [{ url: shareImage, alt: cover?.alt || post.title }]
+        : undefined,
     },
     twitter: {
-      card: cover ? "summary_large_image" : "summary",
-      title: post.title,
+      card: shareImage ? "summary_large_image" : "summary",
+      title,
       description,
-      images: cover ? [cover] : undefined,
+      images: shareImage ? [shareImage] : undefined,
     },
   };
 }
 
 export default async function PostPage({ params }) {
   const { slug } = await params;
-  const post = await getPublishedPostBySlug(slug);
+  const post = await getLivePostBySlug(slug);
   if (!post) notFound(); // also covers drafts
 
   const [{ older, newer }, related] = await Promise.all([
@@ -74,13 +78,11 @@ export default async function PostPage({ params }) {
   ]);
 
   const published = postDate(post);
-  const publishedLabel = formatDate(published);
-  const updatedLabel = formatDate(post.updatedAt);
-  const wasUpdated = post.updatedAt > published && updatedLabel !== publishedLabel;
+  const type = contentTypeByValue(post.contentType);
+  const cover = coverOf(post);
 
   const toc = getTableOfContents(post.content);
   const showToc = toc.length >= MIN_TOC_HEADINGS;
-  const hasCover = isCloudinaryImage(post.coverUrl);
 
   return (
     <>
@@ -88,13 +90,12 @@ export default async function PostPage({ params }) {
 
       <article>
         <header className={`${container} pb-10 pt-16 md:pt-20`}>
-          {post.tags.length > 0 && (
-            <div className="rise flex flex-wrap gap-2">
-              {post.tags.map((tag) => (
-                <TagChip key={tag} tag={tag} />
-              ))}
-            </div>
-          )}
+          <p className="rise flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-xs uppercase tracking-[0.2em] text-[var(--slate)]">
+            <span aria-hidden className="h-px w-10 bg-[var(--signal)]" />
+            {post.category && <span>{post.category.name}</span>}
+            {post.category && type && <span aria-hidden>·</span>}
+            {type && <span className="text-[var(--signal)]">{type.label}</span>}
+          </p>
           <h1
             className="rise mt-6 max-w-4xl font-display text-4xl font-semibold leading-[1.08] tracking-tight text-[var(--ink)] md:text-6xl"
             style={{ "--delay": "80ms" }}
@@ -105,29 +106,42 @@ export default async function PostPage({ params }) {
             className={`${metaLine} rise mt-6 flex flex-wrap gap-x-2 gap-y-1`}
             style={{ "--delay": "160ms" }}
           >
-            <time dateTime={published.toISOString()}>{publishedLabel}</time>
-            {wasUpdated && (
+            <time dateTime={published.toISOString()}>
+              {formatDate(published)}
+            </time>
+            {/* Only a "significant update" sets contentUpdatedAt; ordinary edits do not. */}
+            {post.contentUpdatedAt && (
               <>
                 <span aria-hidden>·</span>
                 <span>
-                  Updated{" "}
-                  <time dateTime={post.updatedAt.toISOString()}>
-                    {updatedLabel}
+                  Last updated{" "}
+                  <time dateTime={post.contentUpdatedAt.toISOString()}>
+                    {formatDate(post.contentUpdatedAt)}
                   </time>
                 </span>
               </>
             )}
             <span aria-hidden>·</span>
-            <span>{readingMinutes(post.content)} min read</span>
+            <span>{post.readingTime} min read</span>
           </p>
+          {post.tags.length > 0 && (
+            <div
+              className="rise mt-6 flex flex-wrap gap-2"
+              style={{ "--delay": "240ms" }}
+            >
+              {post.tags.map((tag) => (
+                <TagChip key={tag.slug} tag={tag} />
+              ))}
+            </div>
+          )}
         </header>
 
-        {hasCover && (
+        {cover && (
           <div className={container}>
             <div className="relative aspect-video overflow-hidden rounded-2xl border border-[var(--line)]">
               <Image
-                src={post.coverUrl}
-                alt=""
+                src={cover.url}
+                alt={cover.alt}
                 fill
                 priority
                 sizes="(min-width: 1152px) 1104px, 100vw"

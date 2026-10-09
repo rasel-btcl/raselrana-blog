@@ -1,11 +1,19 @@
 import DeletePostButton from "@/components/admin/DeletePostButton";
-import { auth } from "@/lib/auth";
-import { formatDate } from "@/lib/posts";
+import { getCurrentUser } from "@/lib/authz";
+import { contentTypeByValue } from "@/lib/content-types";
+import { formatDate, postPath } from "@/lib/posts";
 import { buttonPrimary, buttonSmall, chip, metaLine, pageLabel } from "@/lib/ui";
 import { getAllPostsForAdmin } from "@/services/posts/queries";
 import Link from "next/link";
 
 export const metadata = { title: "Posts" };
+
+const STATUS_LABELS = {
+  DRAFT: "Draft",
+  SCHEDULED: "Scheduled",
+  PUBLISHED: "Published",
+  ARCHIVED: "Archived",
+};
 
 function Stat({ label, value }) {
   return (
@@ -21,8 +29,11 @@ function Stat({ label, value }) {
 }
 
 export default async function DashboardPage() {
-  const [session, posts] = await Promise.all([auth(), getAllPostsForAdmin()]);
-  const publishedCount = posts.filter((p) => p.published).length;
+  const [user, posts] = await Promise.all([
+    getCurrentUser(),
+    getAllPostsForAdmin(),
+  ]);
+  const publishedCount = posts.filter((p) => p.status === "PUBLISHED").length;
 
   return (
     <>
@@ -30,7 +41,7 @@ export default async function DashboardPage() {
         <div>
           <p className={pageLabel}>
             <span aria-hidden className="h-px w-10 bg-[var(--signal)]" />
-            Signed in as {session?.user?.name ?? session?.user?.email}
+            Signed in as {user?.name ?? user?.email}
           </p>
           <h1 className="mt-5 font-display text-4xl font-semibold tracking-tight text-[var(--ink)]">
             Posts
@@ -63,12 +74,12 @@ export default async function DashboardPage() {
                   <div className="flex flex-wrap items-center gap-3">
                     <span
                       className={`${chip} ${
-                        post.published
+                        post.status === "PUBLISHED"
                           ? "border-[var(--signal)] text-[var(--signal)]"
                           : ""
                       }`}
                     >
-                      {post.published ? "Published" : "Draft"}
+                      {STATUS_LABELS[post.status] ?? post.status}
                     </span>
                     <Link
                       href={`/admin/${post.id}/edit`}
@@ -78,17 +89,24 @@ export default async function DashboardPage() {
                     </Link>
                   </div>
                   <p className={`${metaLine} mt-2 break-all`}>
-                    /{post.slug}
-                    {post.published && post.publishedAt
-                      ? ` · published ${formatDate(post.publishedAt)}`
-                      : ""}
-                    {` · edited ${formatDate(post.updatedAt)}`}
-                    {post.tags.length > 0 ? ` · ${post.tags.join(", ")}` : ""}
+                    {[
+                      `/${post.slug}`,
+                      post.category?.name ?? "No category",
+                      contentTypeByValue(post.contentType)?.label,
+                      post.status === "PUBLISHED" && post.publishedAt
+                        ? `published ${formatDate(post.publishedAt)}`
+                        : null,
+                      `edited ${formatDate(post.updatedAt)}`,
+                      post.tags.map((tag) => tag.name).join(", "),
+                      post.showOnMainSite ? null : "hidden from main site",
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  {post.published && (
-                    <Link href={`/posts/${post.slug}`} className={buttonSmall}>
+                  {post.status === "PUBLISHED" && (
+                    <Link href={postPath(post.slug)} className={buttonSmall}>
                       View
                     </Link>
                   )}

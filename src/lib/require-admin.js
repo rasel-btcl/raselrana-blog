@@ -1,24 +1,31 @@
 import { NextResponse } from "next/server";
-import { auth } from "./auth";
+import { AuthzError, requireRole, requireUser } from "./authz";
 
-/**
- * Guard for API route handlers. Returns `{ session }` for a signed-in admin,
- * otherwise `{ response }` holding the 401/403 to send back.
- */
-export async function requireAdmin() {
-  const session = await auth();
+// Guards for API route handlers, built on src/lib/authz.js. Each returns `{ user }`,
+// or `{ response }` holding the 401/403 to send back.
 
-  if (!session?.user) {
-    return {
-      response: NextResponse.json({ error: "Unauthorized" }, { status: 401 }),
-    };
+async function guard(check) {
+  try {
+    return { user: await check() };
+  } catch (error) {
+    if (error instanceof AuthzError) {
+      return {
+        response: NextResponse.json(
+          { error: error.message },
+          { status: error.status },
+        ),
+      };
+    }
+    throw error;
   }
+}
 
-  if (session.user.role !== "admin") {
-    return {
-      response: NextResponse.json({ error: "Forbidden" }, { status: 403 }),
-    };
-  }
+/** Any signed-in, active user. */
+export function requireApiUser() {
+  return guard(() => requireUser());
+}
 
-  return { session };
+/** A signed-in, active ADMIN. */
+export function requireAdmin() {
+  return guard(() => requireRole("ADMIN"));
 }

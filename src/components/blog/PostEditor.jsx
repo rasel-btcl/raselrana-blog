@@ -3,6 +3,7 @@
 import ImageUploader from "@/components/media/ImageUploader";
 import Markdown from "@/components/mdx/Markdown";
 import { cloudinaryUrl } from "@/lib/cloudinary-loader";
+import { CONTENT_TYPES, DEFAULT_CONTENT_TYPE } from "@/lib/content-types";
 import { slugify } from "@/lib/posts";
 import {
   buttonPrimary,
@@ -12,6 +13,7 @@ import {
   fieldLabel,
   input,
 } from "@/lib/ui";
+import { parseYouTubeUrl } from "@/lib/youtube";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 
@@ -19,12 +21,21 @@ const basePath = process.env.NEXT_PUBLIC_BASE_PATH || "";
 
 const MAX_TAGS = 8;
 const MAX_EXCERPT_LENGTH = 300;
+const MAX_ALT_LENGTH = 200;
+
+const altFromFile = (file) =>
+  file.name.replace(/\.[^.]+$/, "").replace(/[-_]+/g, " ");
 
 /**
  * Create or edit a post. Pass `post` to edit an existing one.
- * `tagSuggestions` are topics already in use, offered so one topic is not spelled two ways.
+ * `categories` fills the category select; `tagSuggestions` are topics already in
+ * use, offered so one topic is not spelled two ways.
  */
-export default function PostEditor({ post = null, tagSuggestions = [] }) {
+export default function PostEditor({
+  post = null,
+  categories = [],
+  tagSuggestions = [],
+}) {
   const router = useRouter();
   const contentRef = useRef(null);
 
@@ -33,20 +44,31 @@ export default function PostEditor({ post = null, tagSuggestions = [] }) {
   // The slug follows the title until it is edited by hand (or the post already exists).
   const [slugEdited, setSlugEdited] = useState(Boolean(post));
   const [excerpt, setExcerpt] = useState(post?.excerpt ?? "");
+  const [categoryId, setCategoryId] = useState(post?.categoryId ?? "");
+  const [contentType, setContentType] = useState(
+    post?.contentType ?? DEFAULT_CONTENT_TYPE,
+  );
   const [tags, setTags] = useState(post?.tags ?? []);
   const [tagDraft, setTagDraft] = useState("");
-  const [coverImage, setCoverImage] = useState(
-    post?.coverUrl && post?.coverPublicId
-      ? { url: post.coverUrl, publicId: post.coverPublicId }
-      : null,
+  // { url, publicId, width, height, alt }
+  const [featuredImage, setFeaturedImage] = useState(
+    post?.featuredImage ?? null,
   );
   const [content, setContent] = useState(post?.content ?? "");
-  const [published, setPublished] = useState(post?.published ?? false);
+  const [showOnMainSite, setShowOnMainSite] = useState(
+    post?.showOnMainSite ?? true,
+  );
+  const [status, setStatus] = useState(post?.status ?? "DRAFT");
+  // Once published, a changed slug leaves the old address redirecting.
+  const everPublished = Boolean(post?.everPublished) || status === "PUBLISHED";
+  const [savedSlug, setSavedSlug] = useState(post?.slug ?? "");
 
   const [view, setView] = useState("write"); // phones show one pane at a time
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
   const [notice, setNotice] = useState(null);
+
+  const published = status === "PUBLISHED";
 
   const handleTitleChange = (value) => {
     setTitle(value);
@@ -66,7 +88,7 @@ export default function PostEditor({ post = null, tagSuggestions = [] }) {
       (t) => t.toLowerCase() === tag.toLowerCase(),
     );
     const value = known ?? tag;
-    if (tags.some((t) => t.toLowerCase() === value.toLowerCase())) return;
+    if (tags.some((t) => slugify(t) === slugify(value))) return;
     setTags([...tags, value]);
   };
 
@@ -79,34 +101,60 @@ export default function PostEditor({ post = null, tagSuggestions = [] }) {
     }
   };
 
-  const insertImage = (image, file) => {
-    const alt = file.name.replace(/\.[^.]+$/, "").replace(/[-_]+/g, " ");
+  /** Put a block of Markdown at the cursor, on lines of its own. */
+  const insertBlock = (block) => {
     const el = contentRef.current;
     const start = el?.selectionStart ?? content.length;
     const end = el?.selectionEnd ?? content.length;
 
     const before = content.slice(0, start);
     const after = content.slice(end);
-    const lead = before && !before.endsWith("\n\n") ? (before.endsWith("\n") ? "\n" : "\n\n") : "";
+    const lead =
+      !before || before.endsWith("\n\n") ? "" : before.endsWith("\n") ? "\n" : "\n\n";
     const tail = after.startsWith("\n\n") ? "" : after.startsWith("\n") ? "\n" : "\n\n";
-    const line = `${lead}![${alt}](${image.url})${tail}`;
+    const text = `${lead}${block}${tail}`;
 
-    setContent(before + line + after);
+    setContent(before + text + after);
 
-    const cursor = before.length + line.length;
+    const cursor = before.length + text.length;
     requestAnimationFrame(() => {
       el?.focus();
       el?.setSelectionRange(cursor, cursor);
     });
   };
 
-  const save = async (publish) => {
+  const insertImage = (image, file) => {
+    insertBlock(`![${altFromFile(file)}](${image.url})`);
+  };
+
+  // Images on consecutive lines (no blank line between) render as one photo grid.
+  const insertGallery = (images, files) => {
+    insertBlock(
+      images
+        .map((image, i) => `![${altFromFile(files[i])}](${image.url})`)
+        .join("\n"),
+    );
+  };
+
+  // A YouTube address on a line of its own renders as a video.
+  const insertVideo = () => {
+    const link = window.prompt("Paste the YouTube link");
+    if (!link) return;
+    if (!parseYouTubeUrl(link.trim())) {
+      setError("That does not look like a YouTube video link");
+      return;
+    }
+    setError(null);
+    insertBlock(link.trim());
+  };
+
+  const save = async (nextStatus) => {
     if (saving) return;
 
     // A topic typed but not yet confirmed with Enter still counts.
     const pending = tagDraft.trim();
     const allTags =
-      pending && !tags.some((t) => t.toLowerCase() === pending.toLowerCase())
+      pending && !tags.some((t) => slugify(t) === slugify(pending))
         ? [...tags, pending]
         : tags;
 
@@ -124,10 +172,13 @@ export default function PostEditor({ post = null, tagSuggestions = [] }) {
             title,
             slug,
             excerpt,
+            categoryId: categoryId || null,
+            contentType,
             tags: allTags,
-            coverImage,
+            featuredImage,
             content,
-            published: publish,
+            showOnMainSite,
+            status: nextStatus,
           }),
         },
       );
@@ -145,16 +196,21 @@ export default function PostEditor({ post = null, tagSuggestions = [] }) {
         return;
       }
 
-      setTags(data.post.tags);
+      const wasPublished = published;
+      const nowPublished = data.post.status === "PUBLISHED";
+
+      setTags(data.post.tags.map((tag) => tag.name));
       setTagDraft("");
       setSlug(data.post.slug);
-      setPublished(data.post.published);
+      setExcerpt(data.post.excerpt);
+      setStatus(data.post.status);
+      setSavedSlug(data.post.slug);
       setNotice(
-        publish
-          ? published
+        nowPublished
+          ? wasPublished
             ? "Changes saved and live."
             : "Published."
-          : published
+          : wasPublished
             ? "Unpublished. The post is a draft again."
             : "Draft saved.",
       );
@@ -182,11 +238,14 @@ export default function PostEditor({ post = null, tagSuggestions = [] }) {
     </button>
   );
 
+  const slugWillRedirect =
+    post && everPublished && savedSlug && slug !== savedSlug;
+
   return (
     <form
       onSubmit={(e) => {
         e.preventDefault();
-        save(published);
+        save(published ? "PUBLISHED" : "DRAFT");
       }}
       className="space-y-8"
     >
@@ -215,7 +274,7 @@ export default function PostEditor({ post = null, tagSuggestions = [] }) {
             <>
               <button
                 type="button"
-                onClick={() => save(false)}
+                onClick={() => save("DRAFT")}
                 disabled={saving}
                 className={buttonSecondary}
               >
@@ -236,7 +295,7 @@ export default function PostEditor({ post = null, tagSuggestions = [] }) {
               </button>
               <button
                 type="button"
-                onClick={() => save(true)}
+                onClick={() => save("PUBLISHED")}
                 disabled={saving}
                 className={buttonPrimary}
               >
@@ -285,6 +344,12 @@ export default function PostEditor({ post = null, tagSuggestions = [] }) {
           <p className="mt-1.5 break-all font-mono text-xs text-[var(--slate)]">
             /blog/posts/{slug || "…"}
           </p>
+          {slugWillRedirect && (
+            <p className="mt-1.5 text-xs text-[var(--danger)]">
+              This post has been published as “{savedSlug}”. Links to
+              the old address will be redirected to the new one.
+            </p>
+          )}
         </div>
 
         <div>
@@ -330,6 +395,43 @@ export default function PostEditor({ post = null, tagSuggestions = [] }) {
           </div>
         </div>
 
+        <div>
+          <label htmlFor="post-category" className={fieldLabel}>
+            Category
+          </label>
+          <select
+            id="post-category"
+            value={categoryId}
+            onChange={(e) => setCategoryId(e.target.value)}
+            className={input}
+          >
+            <option value="">Choose a category…</option>
+            {categories.map((category) => (
+              <option key={category.id} value={category.id}>
+                {category.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label htmlFor="post-type" className={fieldLabel}>
+            Content type
+          </label>
+          <select
+            id="post-type"
+            value={contentType}
+            onChange={(e) => setContentType(e.target.value)}
+            className={input}
+          >
+            {CONTENT_TYPES.map((type) => (
+              <option key={type.value} value={type.value}>
+                {type.label}
+              </option>
+            ))}
+          </select>
+        </div>
+
         <div className="md:col-span-2">
           <label htmlFor="post-excerpt" className={fieldLabel}>
             Excerpt ({excerpt.length}/{MAX_EXCERPT_LENGTH})
@@ -346,32 +448,85 @@ export default function PostEditor({ post = null, tagSuggestions = [] }) {
         </div>
 
         <div className="md:col-span-2">
-          <p className={fieldLabel}>Cover image</p>
-          <div className="flex flex-wrap items-center gap-4">
-            {coverImage && (
+          <p className={fieldLabel}>Featured image</p>
+          <p className="mb-3 text-xs text-[var(--slate)]">
+            Shown on the post card and at the top of the post, and used as the
+            picture when the link is shared on social media.
+          </p>
+          <div className="flex flex-wrap items-start gap-4">
+            {featuredImage && (
               // eslint-disable-next-line @next/next/no-img-element -- small admin preview
               <img
-                src={cloudinaryUrl(coverImage.url, 480)}
-                alt="Cover preview"
+                src={cloudinaryUrl(featuredImage.url, 480)}
+                alt={featuredImage.alt || "Featured image preview"}
                 className="aspect-video w-48 rounded-lg border border-[var(--line)] object-cover"
               />
             )}
-            <ImageUploader
-              label={coverImage ? "Replace cover" : "Upload cover"}
-              onUploaded={(image) =>
-                setCoverImage({ url: image.url, publicId: image.publicId })
-              }
-            />
-            {coverImage && (
-              <button
-                type="button"
-                onClick={() => setCoverImage(null)}
-                className={buttonSmall}
-              >
-                Remove cover
-              </button>
-            )}
+            <div className="min-w-0 flex-1 basis-64 space-y-3">
+              <div className="flex flex-wrap gap-3">
+                <ImageUploader
+                  label={featuredImage ? "Replace image" : "Upload image"}
+                  onUploaded={(image) =>
+                    setFeaturedImage({
+                      url: image.url,
+                      publicId: image.publicId,
+                      width: image.width,
+                      height: image.height,
+                      alt: featuredImage?.alt ?? "",
+                    })
+                  }
+                />
+                {featuredImage && (
+                  <button
+                    type="button"
+                    onClick={() => setFeaturedImage(null)}
+                    className={buttonSmall}
+                  >
+                    Remove image
+                  </button>
+                )}
+              </div>
+              {featuredImage && (
+                <div>
+                  <label htmlFor="post-cover-alt" className={fieldLabel}>
+                    Image description (alt text, needed to publish)
+                  </label>
+                  <input
+                    id="post-cover-alt"
+                    type="text"
+                    value={featuredImage.alt ?? ""}
+                    onChange={(e) =>
+                      setFeaturedImage({ ...featuredImage, alt: e.target.value })
+                    }
+                    maxLength={MAX_ALT_LENGTH}
+                    placeholder="What the picture shows, for readers who cannot see it"
+                    className={input}
+                  />
+                </div>
+              )}
+            </div>
           </div>
+        </div>
+
+        <div className="md:col-span-2">
+          <label className="flex cursor-pointer items-start gap-3">
+            <input
+              type="checkbox"
+              checked={showOnMainSite}
+              onChange={(e) => setShowOnMainSite(e.target.checked)}
+              className="mt-1 h-4 w-4 accent-[var(--signal)]"
+            />
+            <span>
+              <span className="block text-sm font-medium text-[var(--ink)]">
+                Show on main site
+              </span>
+              <span className="block text-xs text-[var(--slate)]">
+                When on, this post can appear in “Latest writing” on
+                raselrana.com.bd once it is published. It is on the blog
+                either way.
+              </span>
+            </span>
+          </label>
         </div>
       </div>
 
@@ -385,7 +540,17 @@ export default function PostEditor({ post = null, tagSuggestions = [] }) {
           <p className={`${fieldLabel} mb-0 hidden lg:block`}>
             Content (Markdown) and live preview
           </p>
-          <ImageUploader label="Insert image" onUploaded={insertImage} />
+          <div className="flex flex-wrap gap-2">
+            <ImageUploader label="Insert image" onUploaded={insertImage} />
+            <ImageUploader
+              label="Insert gallery"
+              multiple
+              onUploaded={insertGallery}
+            />
+            <button type="button" onClick={insertVideo} className={buttonSmall}>
+              Insert video
+            </button>
+          </div>
         </div>
 
         <div className="grid gap-6 lg:grid-cols-2">
@@ -398,7 +563,6 @@ export default function PostEditor({ post = null, tagSuggestions = [] }) {
               ref={contentRef}
               value={content}
               onChange={(e) => setContent(e.target.value)}
-              required
               spellCheck
               placeholder={"## A heading\n\nWrite in Markdown…"}
               className={`${input} h-[70vh] min-h-96 resize-y bg-[var(--surface)] p-5 font-mono leading-relaxed`}
@@ -421,6 +585,11 @@ export default function PostEditor({ post = null, tagSuggestions = [] }) {
             )}
           </div>
         </div>
+        <p className="mt-3 text-xs text-[var(--slate)]">
+          Photos on lines directly under each other (no empty line between)
+          show as a gallery. A YouTube link on a line of its own shows as a
+          video.
+        </p>
       </div>
     </form>
   );

@@ -60,8 +60,8 @@ export default async function BlogHome({ searchParams }) {
           <SearchForm defaultValue={q} />
           {topics.length > 0 && (
             <div className="flex flex-wrap items-center gap-2">
-              {topics.slice(0, MAX_TOPIC_CHIPS).map(({ tag, count }) => (
-                <TagChip key={tag} tag={tag} count={count} />
+              {topics.slice(0, MAX_TOPIC_CHIPS).map((tag) => (
+                <TagChip key={tag.slug} tag={tag} count={tag.count} />
               ))}
               {topics.length > MAX_TOPIC_CHIPS && (
                 <Link

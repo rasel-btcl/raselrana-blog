@@ -1,7 +1,7 @@
 import SignOutButton from "@/components/auth/sign-out-button";
 import BrandMark from "@/components/brand/BrandMark";
 import ThemeToggle from "@/components/layout/ThemeToggle";
-import { auth } from "@/lib/auth";
+import { getCurrentUser } from "@/lib/authz";
 import AuthProvider from "@/providers/auth-provider";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -15,8 +15,9 @@ const navLink =
   "text-sm font-medium text-[var(--slate)] transition-colors hover:text-[var(--ink)]";
 
 export default async function AdminLayout({ children }) {
-  const session = await auth();
-  if (!session) redirect("/login");
+  // Reads the user from the database, so a disabled account is locked out at once.
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
 
   return (
     <AuthProvider>

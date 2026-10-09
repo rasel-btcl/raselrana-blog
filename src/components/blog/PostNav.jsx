@@ -1,10 +1,11 @@
+import { postPath } from "@/lib/posts";
 import Link from "next/link";
 
 function NavLink({ post, label, align }) {
   if (!post) return <span className="hidden md:block" />;
   return (
     <Link
-      href={`/posts/${post.slug}`}
+      href={postPath(post.slug)}
       className={`group rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-6 transition-colors hover:border-[var(--signal)] ${
         align === "right" ? "md:text-right" : ""
       }`}

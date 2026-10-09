@@ -4,33 +4,51 @@ import { buttonSmall } from "@/lib/ui";
 import { uploadImage } from "@/lib/upload-client";
 import { useRef, useState } from "react";
 
-/** A button that picks an image, uploads it, and hands `{ url, publicId, width, height }` to `onUploaded`. */
+/**
+ * A button that picks an image, uploads it, and calls
+ * `onUploaded({ url, publicId, width, height }, file)`.
+ * With `multiple`, several images can be picked; they upload one after another and
+ * `onUploaded` receives two lists instead: `(images, files)`.
+ */
 export default function ImageUploader({
   onUploaded,
   label = "Upload image",
+  multiple = false,
   disabled = false,
 }) {
   const inputRef = useRef(null);
-  const [uploading, setUploading] = useState(false);
+  const [progress, setProgress] = useState(null); // e.g. "2/5" while uploading
   const [error, setError] = useState(null);
 
   const handleFileChange = async (e) => {
-    const file = e.target.files?.[0];
+    const files = [...(e.target.files ?? [])];
     e.target.value = ""; // allow picking the same file again
-    if (!file) return;
+    if (files.length === 0) return;
 
-    setUploading(true);
     setError(null);
+    const images = [];
+    const uploaded = [];
 
     try {
-      onUploaded?.(await uploadImage(file), file);
+      for (const [index, file] of files.entries()) {
+        setProgress(files.length > 1 ? `${index + 1}/${files.length}` : "");
+        images.push(await uploadImage(file));
+        uploaded.push(file);
+      }
     } catch (err) {
       console.error(err);
       setError(err.message || "Image upload failed. Please try again.");
     } finally {
-      setUploading(false);
+      setProgress(null);
     }
+
+    // Keep whatever did upload, even if a later file failed.
+    if (images.length === 0) return;
+    if (multiple) onUploaded?.(images, uploaded);
+    else onUploaded?.(images[0], uploaded[0]);
   };
+
+  const uploading = progress !== null;
 
   return (
     <div className="inline-flex flex-wrap items-center gap-3">
@@ -38,6 +56,7 @@ export default function ImageUploader({
         ref={inputRef}
         type="file"
         accept="image/jpeg,image/png,image/webp,image/gif,image/avif"
+        multiple={multiple}
         onChange={handleFileChange}
         className="sr-only"
         tabIndex={-1}
@@ -49,7 +68,7 @@ export default function ImageUploader({
         disabled={disabled || uploading}
         className={buttonSmall}
       >
-        {uploading ? "Uploading…" : label}
+        {uploading ? `Uploading… ${progress}`.trim() : label}
       </button>
       {error && (
         <p role="alert" className="text-sm text-[var(--danger)]">

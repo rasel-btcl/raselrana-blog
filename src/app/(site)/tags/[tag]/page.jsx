@@ -2,17 +2,9 @@ import Pagination from "@/components/blog/Pagination";
 import PostCard from "@/components/blog/PostCard";
 import { tagPath } from "@/lib/posts";
 import { container, pageHeading, pageLabel } from "@/lib/ui";
-import { getPublishedPosts } from "@/services/posts/queries";
+import { getPublishedPosts, getTagBySlug } from "@/services/posts/queries";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-
-function readTag(value) {
-  try {
-    return decodeURIComponent(value);
-  } catch {
-    return value;
-  }
-}
 
 function parsePage(value) {
   const page = Number(value);
@@ -20,21 +12,30 @@ function parsePage(value) {
 }
 
 export async function generateMetadata({ params }) {
-  const tag = readTag((await params).tag);
+  const tag = await getTagBySlug((await params).tag);
+  if (!tag) return {};
   return {
-    title: `${tag} — Topics`,
-    description: `Posts about ${tag} on Rasel Rana's blog.`,
+    title: `${tag.name} — Topics`,
+    description: `Posts about ${tag.name} on Rasel Rana's blog.`,
   };
 }
 
+// The address holds the topic's slug.
 export default async function TopicPage({ params, searchParams }) {
-  const tag = readTag((await params).tag);
+  const { tag: slug } = await params;
   const page = parsePage((await searchParams).page);
 
-  const { posts, total, totalPages } = await getPublishedPosts({ page, tag });
+  const tag = await getTagBySlug(slug);
+  if (!tag) notFound();
+
+  const { posts, total, totalPages } = await getPublishedPosts({
+    page,
+    tagSlug: tag.slug,
+  });
   if (total === 0) notFound();
 
-  const hrefFor = (n) => (n > 1 ? `${tagPath(tag)}?page=${n}` : tagPath(tag));
+  const hrefFor = (n) =>
+    n > 1 ? `${tagPath(tag.slug)}?page=${n}` : tagPath(tag.slug);
 
   return (
     <>
@@ -49,7 +50,7 @@ export default async function TopicPage({ params, searchParams }) {
           className={`${pageHeading} rise mt-6`}
           style={{ "--delay": "80ms" }}
         >
-          {tag}
+          {tag.name}
         </h1>
         <p
           className="rise mt-5 font-mono text-xs text-[var(--slate)]"

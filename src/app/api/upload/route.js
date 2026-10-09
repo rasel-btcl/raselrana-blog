@@ -1,5 +1,5 @@
 import cloudinary, { UPLOAD_FOLDER } from "@/lib/cloudinary";
-import { requireAdmin } from "@/lib/require-admin";
+import { requireApiUser } from "@/lib/require-admin";
 import { NextResponse } from "next/server";
 
 const MAX_FILE_SIZE = 4 * 1024 * 1024; // Vercel rejects request bodies above ~4.5 MB
@@ -12,7 +12,7 @@ const ALLOWED_TYPES = {
 };
 
 export async function POST(request) {
-  const { response } = await requireAdmin();
+  const { response } = await requireApiUser();
   if (response) return response;
 
   let file;
