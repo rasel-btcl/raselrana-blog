@@ -73,7 +73,7 @@ Much of the blog is not built yet (the README lists what is planned):
 
 `.env` (Prisma CLI): `DATABASE_URL`
 
-`.env.local`: `DATABASE_URL`, `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`, `NEXT_PUBLIC_BASE_PATH` (`/blog`), `AUTH_SECRET`, `AUTH_URL`, plus `ADMIN_EMAIL` / `ADMIN_PASSWORD` / `ADMIN_NAME` for the admin script only. `.env.example` lists them all.
+`.env.local`: `DATABASE_URL`, `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`, `CLOUDINARY_UPLOAD_FOLDER` (optional, defaults to `raselrana-blog`), `NEXT_PUBLIC_BASE_PATH` (`/blog`), `AUTH_SECRET`, `AUTH_URL`, plus `ADMIN_EMAIL` / `ADMIN_PASSWORD` / `ADMIN_NAME` for the admin script only. `.env.example` lists them all.
 
 These belong to the blog's own Vercel project, not the main site's.
 

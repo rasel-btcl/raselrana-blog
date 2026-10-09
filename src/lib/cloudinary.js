@@ -19,6 +19,9 @@ cloudinary.config({
   secure: true,
 });
 
-export const UPLOAD_FOLDER = "raselrana-blog";
+// Folder uploads go into; posts only accept covers from this folder.
+export const UPLOAD_FOLDER =
+  process.env.CLOUDINARY_UPLOAD_FOLDER?.trim().replace(/^\/+|\/+$/g, "") ||
+  "raselrana-blog";
 
 export default cloudinary;
