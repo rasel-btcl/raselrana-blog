@@ -91,7 +91,7 @@ What the audit found to differ from the table above, and what the owner decided.
 |---|---|
 | Mongoose | Already removed (with the owner's approval, before this spec). Nothing uses it. |
 | Scripts folder | Scripts live in `src/scripts/`, not `scripts/`. New scripts go there too. |
-| Sign-in page | Currently `/login`. Moves to `/admin/login` when the admin layout is rebuilt (step 6). |
+| Sign-in page | `/admin/login` (moved in step 6; `/login` redirects). |
 | Content rendering | **Stays Markdown** (`react-markdown`, GFM, `rehype-highlight`), not MDX/Shiki. Posts cannot contain raw HTML or JavaScript, so section 7.4.2 is already satisfied. Callouts are added with the editor work. |
 | Live preview | The editor keeps its instant in-browser preview, which uses the same renderer component as the public page. `/preview/[id]` is still built, for the Preview button. |
 | Image upload | Signed direct uploads as in 7.4.1, but stored under `<CLOUDINARY_UPLOAD_FOLDER>/posts/<post-id>/` (default `raselrana-blog/posts/<post-id>/`). SVG is rejected. |
@@ -636,8 +636,8 @@ Statuses below are from the audit of 2026-10-09 and are updated as steps are bui
 | 3 | Content types + category seed | ✅ | `src/lib/content-types.js`, `src/scripts/seed-categories.js`, `npm run seed:categories`. Seed run; six categories exist. |
 | 4 | Authz + rate limiting | ✅ | `src/lib/authz.js`, `src/lib/login-rate-limit.js`; every write handler goes through `src/lib/require-admin.js`. Tested: 6th attempt blocked, inactive user locked out. |
 | 5 | Query helpers | ✅ | `livePostWhere` / `listedPostWhere` in `queries.js`, `slugs.js`, `revalidate.js`, zod validation, stored `readingTime`. The old-slug redirect itself is step 16. |
-| 6 | Admin layout + Overview | 🟡 | Top bar instead of a sidebar; dashboard has counts and a list only. Login is at `/login`. |
-| 7 | Posts list | 🟡 | Post list with edit/delete on the dashboard. No filters, search, paging, duplicate or archive. |
+| 6 | Admin layout + Overview | ✅ | Sidebar (collapsible on phones), Overview with counts, recently edited, upcoming scheduled and needs review. Login moved to `/admin/login`; old admin addresses redirect. Categories / Tags / Profile links are added to the sidebar with steps 12–14. |
+| 7 | Posts list | 🟡 | `/admin/posts`: table, filters, title search, 20 per page, Edit, View live, Duplicate, Archive / Unarchive, Delete (never-published drafts only). The Preview row action comes with the preview route (step 10). |
 | 8 | Cloudinary upload | ⚠️ | Works through the server (`/api/upload`). Decision: switch to signed direct uploads (section 2). |
 | 9 | Post editor (save) | 🟡 | Has title, slug (with the published-slug warning), excerpt, category, content type, topics, featured image with alt text, "Show on main site", Markdown with live preview, insert image / gallery / video. Still a plain textarea; no SEO fields, related posts, toolbar or shortcuts. |
 | 10 | Preview + autosave | 🟡 | Instant in-browser preview. No `/preview/[id]`, no autosave. |

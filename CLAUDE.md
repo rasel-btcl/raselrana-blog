@@ -68,7 +68,10 @@ Links to the main site go through `components/layout/MainSiteLink.jsx`: a plain 
 
 - `src/app/layout.js` — fonts, theme provider, default metadata. No menu.
 - `src/app/(site)/` — public pages; its layout adds `SiteHeader` and `SiteFooter`. `src/app/not-found.jsx` sits outside the group and includes them itself.
-- `src/app/admin/` and `src/app/login/` — their layouts add the Auth.js `SessionProvider` (kept off public pages so they make no session request) and `robots: noindex`.
+- `src/app/admin/layout.js` — adds the Auth.js `SessionProvider` (kept off public pages so they make no session request) and `robots: noindex` for everything under `/admin`.
+- `src/app/admin/login/` — the sign-in page. It must stay outside the `(panel)` group, or the access check would redirect it to itself.
+- `src/app/admin/(panel)/` — the signed-in area: its layout checks the user, renders the sidebar (`components/admin/AdminNav.jsx`) and is `force-dynamic`. Overview at `/admin`, posts at `/admin/posts`, editor at `/admin/posts/new` and `/admin/posts/[id]/edit`.
+- Row actions on the posts list are server actions in `admin/(panel)/posts/actions.js`. A server action can be called without loading the page, so each one calls `requireUser()` / `requireRole()` and validates its input with zod.
 
 ### Data layer
 
@@ -107,11 +110,11 @@ Two conventions go beyond plain Markdown, both decided by looking at a paragraph
 
 ### Auth and permissions
 
-Credentials provider only (email + bcrypt hash on `User.passwordHash`), JWT sessions. Emails are looked up lower-cased. There is no sign-up flow — the admin user is created by `src/scripts/create-admin.js`. The login page is `/login` (moves to `/admin/login` in spec step 6).
+Credentials provider only (email + bcrypt hash on `User.passwordHash`), JWT sessions. Emails are looked up lower-cased. There is no sign-up flow — the admin user is created by `src/scripts/create-admin.js`. The login page is `/admin/login`.
 
 Permission checks live in `src/lib/authz.js` and read the user **from the database**, not from the session cookie, so a role change or `isActive: false` takes effect at once: `getCurrentUser()`, `requireUser()`, `requireRole("ADMIN")`, `canEditPost(user, post)`, `canSetStatus(user, status)`. The role on the session is only a hint for the UI.
 
-`/admin/*` is guarded twice: `src/proxy.js` (matcher `/admin/:path*`) and `src/app/admin/layout.js` (`getCurrentUser()` + redirect). API route handlers and server actions are outside that matcher, so each one that changes data must start with `requireApiUser()` or `requireAdmin()` from `src/lib/require-admin.js` (wrappers that turn an `AuthzError` into a 401/403 response). Roles are `ADMIN` and `AUTHOR`; only `ADMIN` may publish or delete. Nothing in the UI creates an `AUTHOR` yet.
+`/admin/*` is guarded twice: `src/proxy.js` (matcher `/admin/:path*`, letting `/admin/login` through) and `src/app/admin/(panel)/layout.js` (`getCurrentUser()` + redirect). The proxy must not redirect a signed-in visitor away from the login page: a disabled account still has a cookie and would loop. API route handlers and server actions are outside that matcher, so each one that changes data must start with `requireApiUser()` or `requireAdmin()` from `src/lib/require-admin.js` (wrappers that turn an `AuthzError` into a 401/403 response). Roles are `ADMIN` and `AUTHOR`; only `ADMIN` may publish or delete. Nothing in the UI creates an `AUTHOR` yet.
 
 Login rate limiting (`src/lib/login-rate-limit.js`): every attempt is stored as a `LoginAttempt` keyed by email + IP; after 5 failures in 15 minutes the next attempts are refused with the code `rate_limited`, whether or not the email exists. A successful sign-in resets the count; attempts older than 24 hours are deleted on each login. To unblock yourself locally, delete the `LoginAttempt` documents.
 
@@ -119,7 +122,7 @@ Login rate limiting (`src/lib/login-rate-limit.js`): every attempt is stored as 
 
 - `GET /api/posts?limit=` — **public, and a contract with the main site** (its home page shows the newest posts). Only listed posts with `showOnMainSite` on. The shape, caching header and rules are in `docs/main-site-api.md`; fields may be added but not removed or renamed, and never content or ids.
 - `POST /api/posts`, `PATCH /api/posts/[id]` — any signed-in user who may edit the post; setting a status other than `DRAFT` needs `ADMIN`. The editor always sends the full post, including `status`.
-- `DELETE /api/posts/[id]` — `ADMIN`.
+- `DELETE /api/posts/[id]` — `ADMIN`, and only for a draft that was never published (409 otherwise; archive instead).
 - `POST /api/upload` — signed-in users; JPEG/PNG/WebP/GIF/AVIF, max 4 MB (Vercel's request body limit), stored in `UPLOAD_FOLDER`. To be replaced by signed direct uploads in spec step 8.
 
 ## Not built / leftovers

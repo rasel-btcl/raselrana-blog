@@ -99,6 +99,21 @@ const dateFormat = new Intl.DateTimeFormat("en-GB", {
   timeZone: "Asia/Dhaka",
 });
 
+const dateTimeFormat = new Intl.DateTimeFormat("en-GB", {
+  day: "numeric",
+  month: "short",
+  year: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+  hour12: false,
+  timeZone: "Asia/Dhaka",
+});
+
+/** "8 Oct 2026, 18:42" in Dhaka time (used in the admin). */
+export function formatDateTime(date) {
+  return dateTimeFormat.format(new Date(date));
+}
+
 /** "8 Oct 2026" */
 export function formatDate(date) {
   return dateFormat.format(new Date(date));

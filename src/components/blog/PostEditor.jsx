@@ -191,7 +191,7 @@ export default function PostEditor({
 
       if (!post) {
         // Continue on the edit page of the post that was just created.
-        router.replace(`/admin/${data.post.id}/edit`);
+        router.replace(`/admin/posts/${data.post.id}/edit`);
         router.refresh();
         return;
       }

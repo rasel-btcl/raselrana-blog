@@ -9,7 +9,7 @@ import {
 import { prisma } from "./prisma";
 
 // Auth.js uses these paths verbatim, so the Next.js basePath has to be included.
-const LOGIN_PATH = `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/login`;
+const LOGIN_PATH = `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/admin/login`;
 
 // Compared against when the email is unknown, so both failure cases take the same time.
 const DUMMY_HASH = bcrypt.hashSync("invalid-password-placeholder", 12);

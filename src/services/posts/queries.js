@@ -259,3 +259,102 @@ export async function getAllTagNames() {
   });
   return tags.map((tag) => tag.name);
 }
+
+// ---------- Admin overview and posts list ----------
+
+export const ADMIN_POSTS_PER_PAGE = 20;
+
+const ADMIN_ROW_SELECT = {
+  id: true,
+  title: true,
+  slug: true,
+  status: true,
+  contentType: true,
+  showOnMainSite: true,
+  publishedAt: true,
+  updatedAt: true,
+  category: { select: { name: true } },
+};
+
+/** `{ DRAFT, SCHEDULED, PUBLISHED, ARCHIVED }` → number of posts. */
+export async function getPostCounts() {
+  const groups = await prisma.post.groupBy({ by: ["status"], _count: true });
+  const counts = { DRAFT: 0, SCHEDULED: 0, PUBLISHED: 0, ARCHIVED: 0 };
+  for (const group of groups) counts[group.status] = group._count;
+  return counts;
+}
+
+export async function getRecentlyEditedPosts(limit = 5) {
+  return prisma.post.findMany({
+    orderBy: { updatedAt: "desc" },
+    take: limit,
+    select: ADMIN_ROW_SELECT,
+  });
+}
+
+/** Scheduled posts still waiting for their time, soonest first. */
+export async function getUpcomingScheduledPosts(limit = 5) {
+  return prisma.post.findMany({
+    where: { status: "SCHEDULED", publishedAt: { gt: new Date() } },
+    orderBy: { publishedAt: "asc" },
+    take: limit,
+    select: ADMIN_ROW_SELECT,
+  });
+}
+
+/**
+ * Published posts not reviewed for more than `months`: their last significant
+ * update (or, without one, their publish date) is older than that. Oldest first.
+ */
+export async function getPostsNeedingReview(months = 12, limit = 10) {
+  const cutoff = new Date();
+  cutoff.setMonth(cutoff.getMonth() - months);
+
+  // "contentUpdatedAt, else publishedAt" cannot be expressed in one filter,
+  // so narrow by publish date here and finish in JavaScript.
+  const candidates = await prisma.post.findMany({
+    where: { status: "PUBLISHED", publishedAt: { lt: cutoff } },
+    select: { ...ADMIN_ROW_SELECT, contentUpdatedAt: true },
+  });
+
+  return candidates
+    .map((post) => ({
+      ...post,
+      reviewedAt: post.contentUpdatedAt ?? post.publishedAt,
+    }))
+    .filter((post) => post.reviewedAt < cutoff)
+    .sort((a, b) => a.reviewedAt - b.reviewedAt)
+    .slice(0, limit);
+}
+
+/** The admin posts table: filters, title search and paging. */
+export async function getPostsForAdminList({
+  page = 1,
+  status,
+  categoryId,
+  contentType,
+  q,
+} = {}) {
+  const where = {};
+  if (status) where.status = status;
+  if (categoryId) where.categoryId = categoryId;
+  if (contentType) where.contentType = contentType;
+  if (q) where.title = { contains: q, mode: "insensitive" };
+
+  const [total, posts] = await Promise.all([
+    prisma.post.count({ where }),
+    prisma.post.findMany({
+      where,
+      orderBy: { updatedAt: "desc" },
+      skip: (page - 1) * ADMIN_POSTS_PER_PAGE,
+      take: ADMIN_POSTS_PER_PAGE,
+      select: ADMIN_ROW_SELECT,
+    }),
+  ]);
+
+  return {
+    posts,
+    total,
+    totalPages: Math.max(1, Math.ceil(total / ADMIN_POSTS_PER_PAGE)),
+  };
+}

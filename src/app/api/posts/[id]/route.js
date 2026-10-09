@@ -61,6 +61,7 @@ export async function DELETE(request, { params }) {
     if (!deleted) return fail(404, "Post not found");
     return NextResponse.json({ ok: true });
   } catch (error) {
+    if (error instanceof PostError) return fail(error.status, error.message);
     console.error("Post delete error:", error);
     return fail(500, "Failed to delete post");
   }

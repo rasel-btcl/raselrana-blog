@@ -46,6 +46,7 @@ export default function LoginPage() {
 
   return (
     <main className="flex min-h-screen items-center justify-center px-6 py-16">
+      <title>Sign in — Blog admin</title>
       <div className="w-full max-w-sm">
         <div className="flex items-center gap-3">
           <BrandMark size={40} />

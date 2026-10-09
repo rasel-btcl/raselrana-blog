@@ -113,13 +113,21 @@ export async function updatePost(existing, data) {
   return post;
 }
 
-/** Returns `false` if the post does not exist. */
+/** Returns `false` if the post does not exist; throws PostError if it may not be deleted. */
 export async function deletePost(id) {
   const existing = await prisma.post.findUnique({
     where: { id },
-    select: { id: true, ...PAGES_SELECT },
+    select: { id: true, status: true, publishedAt: true, ...PAGES_SELECT },
   });
   if (!existing) return false;
+
+  // Only a draft that was never public may be deleted (links may point at the rest).
+  if (existing.status !== "DRAFT" || existing.publishedAt) {
+    throw new PostError(
+      409,
+      "Only drafts that were never published can be deleted. Archive this post instead.",
+    );
+  }
 
   // Take the post off its topics first, so no topic keeps a dangling reference.
   await prisma.post.update({
@@ -130,4 +138,73 @@ export async function deletePost(id) {
 
   revalidatePosts(existing);
   return true;
+}
+
+// ---------- Posts list actions ----------
+
+const WITH_PAGES = { category: true, tags: true };
+
+async function loadForAction(id) {
+  const post = await prisma.post.findUnique({
+    where: { id },
+    include: WITH_PAGES,
+  });
+  if (!post) throw new PostError(404, "Post not found");
+  return post;
+}
+
+/** Take a post off the site without deleting it. Its first publish date is kept. */
+export async function archivePost(id) {
+  const existing = await loadForAction(id);
+  const post = await prisma.post.update({
+    where: { id },
+    data: { status: "ARCHIVED" },
+    include: WITH_PAGES,
+  });
+  revalidatePosts(existing, post);
+  return post;
+}
+
+/** An archived post comes back as a draft, to be checked before it goes public again. */
+export async function unarchivePost(id) {
+  const existing = await loadForAction(id);
+  if (existing.status !== "ARCHIVED") return existing;
+  return prisma.post.update({
+    where: { id },
+    data: { status: "DRAFT" },
+    include: WITH_PAGES,
+  });
+}
+
+/** A new draft titled "Copy of …" with its own slug. Never published, never scheduled. */
+export async function duplicatePost(id, author) {
+  const source = await loadForAction(id);
+
+  const base = `copy-of-${source.slug}`.slice(0, 110);
+  let slug = base;
+  for (let n = 2; await isSlugTaken(slug); n += 1) slug = `${base}-${n}`;
+
+  return prisma.post.create({
+    data: {
+      title: `Copy of ${source.title}`.slice(0, 200),
+      slug,
+      excerpt: source.excerpt,
+      content: source.content,
+      contentType: source.contentType,
+      status: "DRAFT",
+      featuredImage: source.featuredImage ?? undefined,
+      relatedPostIds: source.relatedPostIds,
+      readingTime: source.readingTime,
+      seoTitle: source.seoTitle,
+      seoDescription: source.seoDescription,
+      ogImageUrl: source.ogImageUrl,
+      noindex: source.noindex,
+      showOnMainSite: source.showOnMainSite,
+      author: { connect: { id: author.id } },
+      ...(source.categoryId
+        ? { category: { connect: { id: source.categoryId } } }
+        : {}),
+      tags: { connect: source.tags.map((tag) => ({ id: tag.id })) },
+    },
+  });
 }
